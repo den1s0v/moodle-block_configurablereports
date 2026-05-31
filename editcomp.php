@@ -147,12 +147,24 @@ echo $OUTPUT->header();
 $currenttab = $comp;
 require('tabs.php');
 
+$filteranalysis = null;
+if ($comp === 'filters' && $report->type === 'sql') {
+    require_once($CFG->dirroot . '/blocks/configurable_reports/classes/filter_sql_analyzer.php');
+    $allcomponents = cr_unserialize($report->components);
+    $querysql = $allcomponents['customsql']['config']->querysql ?? '';
+    $filteranalysis = \block_configurable_reports\filter_sql_analyzer::analyse($querysql, $elements);
+}
+
 if ($elements) {
     $table = new stdclass;
-    $table->head = [get_string('idnumber'), get_string('name'), get_string('summary'), get_string('edit')];
+    $table->head = [get_string('idnumber'), get_string('name'), get_string('summary')];
+    if ($filteranalysis !== null) {
+        $table->head[] = get_string('filterusage_column', 'block_configurable_reports');
+    }
+    $table->head[] = get_string('edit');
     $i = 0;
 
-    foreach ($elements as $e) {
+    foreach ($elements as $idx => $e) {
 
         if (empty($e)) {
             continue;
@@ -192,10 +204,74 @@ if ($elements) {
                 '</a>';
         }
 
-        $table->data[] = ['c' . ($i + 1), $e['pluginfullname'], $e['summary'], $editcell];
+        $rowdata = ['c' . ($i + 1), $e['pluginfullname'], $e['summary']];
+        if ($filteranalysis !== null) {
+            $usagecell = get_string('filterusage_notfound', 'block_configurable_reports');
+            if (isset($filteranalysis->filterrows[$idx])) {
+                $userow = $filteranalysis->filterrows[$idx];
+                if ($userow->status === 'used') {
+                    $usagecell = get_string('filterusage_used', 'block_configurable_reports', (object) [
+                        'detail' => implode('; ', $userow->usages),
+                    ]);
+                } else if ($userow->status === 'duplicate') {
+                    $usagecell = get_string('filterusage_duplicate', 'block_configurable_reports') . '<br />' .
+                        get_string('filterusage_used', 'block_configurable_reports', (object) [
+                            'detail' => implode('; ', $userow->usages),
+                        ]);
+                }
+            }
+            $rowdata[] = $usagecell;
+        }
+        $rowdata[] = $editcell;
+        $table->data[] = $rowdata;
         $i++;
     }
     cr_print_table($table);
+
+    if ($filteranalysis !== null) {
+        if (!empty($filteranalysis->notices)) {
+            foreach ($filteranalysis->notices as $noticekey) {
+                echo $OUTPUT->notification(get_string($noticekey, 'block_configurable_reports'), 'info');
+            }
+        }
+        if (!empty($filteranalysis->missing)) {
+            echo $OUTPUT->heading(get_string('filtersql_missing_heading', 'block_configurable_reports'), 4);
+            $missingtable = new html_table();
+            $missingtable->head = [
+                get_string('filtersql_placeholder', 'block_configurable_reports'),
+                get_string('filtersql_detail', 'block_configurable_reports'),
+                get_string('edit'),
+            ];
+            foreach ($filteranalysis->missing as $missing) {
+                $addlinks = [];
+                foreach ($missing->suggestedplugins as $splugin) {
+                    $params = [
+                        'id' => $id,
+                        'comp' => $comp,
+                        'pname' => $splugin,
+                    ];
+                    if (!empty($missing->prefill->idnumber)) {
+                        $params['prefill_idnumber'] = $missing->prefill->idnumber;
+                    }
+                    if (!empty($missing->prefill->field)) {
+                        $params['prefill_field'] = $missing->prefill->field;
+                    }
+                    if (!empty($missing->prefill->label)) {
+                        $params['prefill_label'] = $missing->prefill->label;
+                    }
+                    $url = new moodle_url('/blocks/configurable_reports/editplugin.php', $params);
+                    $addlinks[] = html_writer::link($url, get_string('filtersql_addfilter', 'block_configurable_reports') .
+                        ' (' . get_string($splugin, 'block_configurable_reports') . ')');
+                }
+                $missingtable->data[] = [
+                    s($missing->placeholder),
+                    $missing->detail,
+                    implode('<br />', $addlinks),
+                ];
+            }
+            echo html_writer::table($missingtable);
+        }
+    }
 } else if ($compclass->plugins) {
     echo $OUTPUT->heading(get_string('no' . $comp . 'yet', 'block_configurable_reports'));
 }

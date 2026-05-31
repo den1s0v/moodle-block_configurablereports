@@ -23,6 +23,17 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
+/** Normal filter execution from request parameters. */
+defined('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_NORMAL') || define('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_NORMAL', 0);
+/** Treat empty filters as false (AND 1=0) — used for SQL validation. */
+defined('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE') || define('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE', 1);
+/** Do not apply filters — return raw SQL (analysis only). */
+defined('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_SKIP') || define('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_SKIP', 2);
+/** Inherit site default for requirefiltersubmit. */
+defined('BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT') || define('BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT', -1);
+
 /**
  * cr_print_js_function
  *

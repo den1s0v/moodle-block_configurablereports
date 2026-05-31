@@ -134,4 +134,51 @@ abstract class plugin_base {
         throw new coding_exception('print_filter method not implemented');
     }
 
+    /**
+     * Add empty-filter behaviour field to filter configuration forms.
+     *
+     * @param MoodleQuickForm $mform
+     * @return void
+     */
+    public function add_emptybehavior_field(MoodleQuickForm $mform): void {
+        $options = [
+            'omit' => get_string('emptybehavior_omit', 'block_configurable_reports'),
+            'false' => get_string('emptybehavior_false', 'block_configurable_reports'),
+            'default' => get_string('emptybehavior_default', 'block_configurable_reports'),
+        ];
+        $mform->addElement('select', 'emptybehavior', get_string('emptybehavior', 'block_configurable_reports'), $options);
+        $mform->setDefault('emptybehavior', 'omit');
+        $mform->addHelpButton('emptybehavior', 'emptybehavior', 'block_configurable_reports');
+    }
+
+    /**
+     * Get configured behaviour when filter value is empty on the report form.
+     *
+     * @param object $formdata
+     * @return string omit|false|default
+     */
+    public function get_emptybehavior(object $formdata): string {
+        $behavior = $formdata->emptybehavior ?? 'omit';
+        if (!in_array($behavior, ['omit', 'false', 'default'], true)) {
+            return 'omit';
+        }
+        return $behavior;
+    }
+
+    /**
+     * SQL replacement when filter is empty and behaviour is "false".
+     *
+     * @param string $fullplaceholder Full %%...%% token.
+     * @return string
+     */
+    public function get_restrictive_replacement(string $fullplaceholder): string {
+        if (preg_match('/%%FILTER_COURSEMODULE:/i', $fullplaceholder)) {
+            return ' AND 1=0 ';
+        }
+        if (preg_match('/%%FILTER_COURSEMODULEFIELDS:/i', $fullplaceholder)) {
+            return ' 1=0 ';
+        }
+        return ' AND 1=0 ';
+    }
+
 }

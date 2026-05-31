@@ -97,6 +97,13 @@ abstract class report_base {
     public ?object $config;
 
     /**
+     * Whether report SQL execution was deferred pending filter submit.
+     *
+     * @var bool
+     */
+    public bool $executiondeferred = false;
+
+    /**
      * reports_base
      *
      * @param object|int $report
@@ -280,6 +287,111 @@ abstract class report_base {
             }
             $this->filterform = $filterform;
         }
+    }
+
+    /**
+     * Whether any filter parameter is present in the current request.
+     *
+     * @return bool
+     */
+    public function has_any_filter_param_in_request(): bool {
+        $request = array_merge($_POST, $_GET);
+        foreach ($request as $key => $val) {
+            if (strpos($key, 'filter_') === 0 && $val !== '' && $val !== null) {
+                if (is_array($val)) {
+                    foreach ($val as $v) {
+                        if ($v !== '' && $v !== null && $v !== 0 && $v !== '0') {
+                            return true;
+                        }
+                    }
+                } else if ($val !== '0' && $val !== 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the filter form was submitted for this request.
+     *
+     * @return bool
+     */
+    public function filters_submitted(): bool {
+        return optional_param('filterssubmitted', 0, PARAM_INT) === 1
+            || $this->has_any_filter_param_in_request();
+    }
+
+    /**
+     * Effective requirefiltersubmit setting for this report.
+     *
+     * @return bool
+     */
+    public function effective_requirefiltersubmit(): bool {
+        $reportsetting = $this->config->requirefiltersubmit ?? BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT;
+        if ((int) $reportsetting === BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT) {
+            return (bool) get_config('block_configurable_reports', 'requirefiltersubmit');
+        }
+        return (int) $reportsetting === 1;
+    }
+
+    /**
+     * Whether this report has configured filter elements.
+     *
+     * @return bool
+     */
+    public function has_configured_filters(): bool {
+        $components = cr_unserialize($this->config->components);
+        $filters = $components['filters']['elements'] ?? [];
+        return !empty($filters);
+    }
+
+    /**
+     * Whether SQL execution should wait until the filter form is submitted.
+     *
+     * @return bool
+     */
+    public function should_defer_execution(): bool {
+        if ($this->config->type !== 'sql') {
+            return false;
+        }
+        if (!$this->has_configured_filters()) {
+            return false;
+        }
+        if (!$this->effective_requirefiltersubmit()) {
+            return false;
+        }
+        return !$this->filters_submitted();
+    }
+
+    /**
+     * Create empty report output when execution is deferred.
+     *
+     * @return bool
+     */
+    public function create_report_deferred(): bool {
+        $this->executiondeferred = true;
+        $this->sql = '';
+        $this->totalrecords = 0;
+
+        $table = new stdClass;
+        $table->id = 'reporttable';
+        $table->data = [];
+        $table->head = [];
+
+        $calcs = new html_table();
+        $calcs->id = 'calcstable';
+        $calcs->data = [[]];
+        $calcs->head = [];
+
+        if (!$this->finalreport) {
+            $this->finalreport = new stdClass;
+        }
+        $this->finalreport->name = $this->config->name;
+        $this->finalreport->table = $table;
+        $this->finalreport->calcs = $calcs;
+
+        return true;
     }
 
     /**
@@ -853,12 +965,21 @@ abstract class report_base {
         }
         $this->print_filters();
 
+        if ($this->executiondeferred) {
+            echo $OUTPUT->notification(get_string('filtersubmitrequired', 'block_configurable_reports'), 'info');
+        }
+
         echo "<div id=\"printablediv\">\n";
         // Print the header.
         if (is_array($pagecontents['header'])) {
             echo format_text($pagecontents['header']['text'], $pagecontents['header']['format']);
         } else {
             echo format_text($pagecontents['header'], FORMAT_HTML);
+        }
+
+        if ($this->executiondeferred) {
+            echo "</div>\n";
+            return;
         }
 
         if ($this->config->displaytotalrecords) {
@@ -941,6 +1062,10 @@ abstract class report_base {
         echo '</div>';
 
         $this->print_filters();
+        if ($this->executiondeferred) {
+            echo $OUTPUT->notification(get_string('filtersubmitrequired', 'block_configurable_reports'), 'info');
+            return true;
+        }
         if ($this->finalreport->table && !empty($this->finalreport->table->data[0])) {
 
             echo "<div id=\"printablediv\">\n";

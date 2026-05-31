@@ -139,24 +139,9 @@ class customsql_form extends moodleform {
 
         } else {
             // Now try running the SQL, and ensure it runs without errors.
-
-            $sql = $this->_customdata['reportclass']->prepare_sql($sql);
-            $rs = null;
-            try {
-                $rs = $this->_customdata['reportclass']->execute_query($sql, 2);
-            } catch (dml_read_exception $e) {
-                $errors['querysql'] = get_string('queryfailed', 'block_configurable_reports', $e->error);
-            }
-            if ($rs && !empty($data['singlerow'])) {
-
-                // TODO check where rs_EOF is defined.
-                if (rs_EOF($rs)) {
-                    $errors['querysql'] = get_string('norowsreturned', 'block_configurable_reports');
-                }
-            }
-
-            if ($rs) {
-                $rs->close();
+            $error = $this->_customdata['reportclass']->validate_query_sql($sql);
+            if ($error !== null) {
+                $errors['querysql'] = $error;
             }
         }
 
@@ -188,18 +173,9 @@ class customsql_form extends moodleform {
             $errors['querysql'] = get_string('notallowedwords', 'block_configurable_reports');
         } else {
             // Now try running the SQL, and ensure it runs without errors.
-            $sql = $this->_customdata['reportclass']->prepare_sql($sql);
-            $rs = $this->_customdata['reportclass']->execute_query($sql, 2);
-            if (!$rs) {
-                $errors['querysql'] = get_string('queryfailed', 'block_configurable_reports', $db->ErrorMsg());
-            } else if (!empty($data['singlerow'])) {
-                if (rs_EOF($rs)) {
-                    $errors['querysql'] = get_string('norowsreturned', 'block_configurable_reports');
-                }
-            }
-
-            if ($rs) {
-                $rs->close();
+            $error = $this->_customdata['reportclass']->validate_query_sql($sql);
+            if ($error !== null) {
+                $errors['querysql'] = $error;
             }
         }
 

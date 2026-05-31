@@ -49,6 +49,8 @@ class report_edit_form extends moodleform {
         $this->_customdata->add_filter_elements($mform);
 
         $mform->addElement('hidden', 'id', $this->_customdata->config->id);
+        $mform->addElement('hidden', 'filterssubmitted', 1);
+        $mform->setType('filterssubmitted', PARAM_INT);
         $mform->addElement('hidden', 'courseid', $COURSE->id);
         $mform->setType('id', PARAM_INT);
         $mform->setType('courseid', PARAM_INT);

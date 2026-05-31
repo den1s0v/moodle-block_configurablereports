@@ -58,6 +58,8 @@ class fcoursefield_form extends moodleform {
 
         $mform->addElement('select', 'field', get_string('field', 'block_configurable_reports'), $coursecolumns);
 
+        $this->_customdata['pluginclass']->add_emptybehavior_field($mform);
+
         // Buttons.
         $this->add_action_buttons(true, get_string('add'));
     }

@@ -150,6 +150,20 @@ if (isset($pluginclass->form) && $pluginclass->form) {
 
     if (!empty($cdata)) {
         $editform->set_data($cdata['formdata']);
+    } else {
+        $prefill = new stdClass();
+        if ($prefillid = optional_param('prefill_idnumber', '', PARAM_TEXT)) {
+            $prefill->idnumber = $prefillid;
+        }
+        if ($prefillfield = optional_param('prefill_field', '', PARAM_ALPHANUMEXT)) {
+            $prefill->field = $prefillfield;
+        }
+        if ($prefilllabel = optional_param('prefill_label', '', PARAM_TEXT)) {
+            $prefill->label = $prefilllabel;
+        }
+        if (!empty((array) $prefill)) {
+            $editform->set_data($prefill);
+        }
     }
 
     if ($editform->is_cancelled()) {

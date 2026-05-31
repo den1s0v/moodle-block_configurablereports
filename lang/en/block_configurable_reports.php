@@ -585,3 +585,35 @@ be disabled in your config.php file by setting $CFG->block_configurable_reports_
 $string['csvdelimiter'] = 'CSV delimiter';
 $string['csvdelimiterinfo'] = 'CSV delimiter: "colon" for ":", "comma" for ",", semicolon for ";",  "tab" for "\t" and "cfg" for character configured in "CFG->CSV_DELIMITER" of the config.php file.';
 
+// Filter SQL analysis and execution behaviour.
+$string['filterusage_column'] = 'SQL usage';
+$string['filterusage_used'] = 'Used in query: {$a->detail}';
+$string['filterusage_notfound'] = 'Not found in SQL';
+$string['filterusage_duplicate'] = 'Duplicate placeholder binding';
+$string['filterusage_detail_field'] = 'Field: {$a->field}';
+$string['filterusage_detail_fieldop'] = 'Field: {$a->field}, operator: {$a->operator} ({$a->operatorlabel})';
+$string['filtersql_missing_heading'] = 'Placeholders in SQL without a configured filter';
+$string['filtersql_placeholder'] = 'Placeholder';
+$string['filtersql_detail'] = 'Usage';
+$string['filtersql_addfilter'] = 'Add filter';
+$string['filtersql_startendtime_notice'] = 'This query uses %%STARTTIME%% / %%ENDTIME%% without the Start/end time filter. At runtime they default to the full date range (1970–2038), which may be slow. Add the Start/end time filter or use %%FILTER_STARTTIME%% / %%FILTER_ENDTIME%% placeholders.';
+$string['operator_like'] = 'Contains (LIKE)';
+$string['operator_in'] = 'Multiple LIKE values';
+$string['operator_exact'] = 'Exact match (=)';
+$string['operator_lt'] = 'Less than (<)';
+$string['operator_gt'] = 'Greater than (>)';
+$string['operator_lte'] = 'Less than or equal (<=)';
+$string['operator_gte'] = 'Greater than or equal (>=)';
+$string['operator_unknown'] = 'Operator: {$a}';
+$string['filtersubmitrequired'] = 'Set filters and click Apply to run this report.';
+$string['requirefiltersubmit'] = 'Require filter form before running report';
+$string['requirefiltersubmit_help'] = 'When enabled, SQL reports with filters do not run until the user submits the filter form. The site default can be overridden per report.';
+$string['requirefiltersubmit_inherit'] = 'Use site default (currently: {$a->current})';
+$string['requirefiltersubmit_yes'] = 'Always require Apply';
+$string['requirefiltersubmit_no'] = 'Never require Apply';
+$string['emptybehavior'] = 'When empty on report page';
+$string['emptybehavior_help'] = 'How to treat this filter when the user has not submitted a value. Omit removes the SQL condition (default plugin behaviour). False adds AND 1=0. Default value (when configured) is reserved for a future release.';
+$string['emptybehavior_omit'] = 'Omit condition (match all)';
+$string['emptybehavior_false'] = 'Treat as false (AND 1=0)';
+$string['emptybehavior_default'] = 'Use default value (not yet supported)';
+

@@ -223,6 +223,10 @@ if ($editform->is_cancelled()) {
         $data->displayprintbutton = 0;
     }
 
+    if (!isset($data->requirefiltersubmit)) {
+        $data->requirefiltersubmit = BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT;
+    }
+
     if (empty($report)) {
         $data->ownerid = $USER->id;
         $data->courseid = $courseid;

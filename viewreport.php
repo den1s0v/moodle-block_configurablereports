@@ -75,7 +75,11 @@ $download = $download && $format && strpos($report->export, $format . ',') !== f
 if ($download && $report->type === "sql") {
     $reportclass->set_forexport(true);
 }
-$reportclass->create_report();
+if ($reportclass->should_defer_execution()) {
+    $reportclass->create_report_deferred();
+} else {
+    $reportclass->create_report();
+}
 
 $action = (!empty($download)) ? 'download' : 'view';
 

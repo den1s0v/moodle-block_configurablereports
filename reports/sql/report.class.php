@@ -40,6 +40,11 @@ class report_sql extends report_base {
     private bool $forexport = false;
 
     /**
+     * @var int
+     */
+    private int $filterexecmode = BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_NORMAL;
+
+    /**
      * set_forexport
      *
      * @param bool $isforexport
@@ -75,13 +80,128 @@ class report_sql extends report_base {
     }
 
     /**
+     * Build executable SQL from raw query and configured filters.
+     *
+     * @param string $rawsql SQL from report configuration.
+     * @param int $mode BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_* constant.
+     * @return string
+     */
+    public function build_sql_from_config(string $rawsql, int $mode = BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_NORMAL): string {
+        global $CFG;
+
+        if ($mode === BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_SKIP) {
+            return $rawsql;
+        }
+
+        $this->filterexecmode = $mode;
+        $sql = $rawsql;
+
+        $components = cr_unserialize($this->config->components);
+        $filters = $components['filters']['elements'] ?? [];
+
+        if ($mode !== BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE && !empty($filters)) {
+            foreach ($filters as $f) {
+                require_once($CFG->dirroot . '/blocks/configurable_reports/components/filters/' . $f['pluginname'] .
+                    '/plugin.class.php');
+                $classname = 'plugin_' . $f['pluginname'];
+                $class = new $classname($this->config);
+                $formdata = (object) ($f['formdata'] ?? new stdClass());
+                $sql = $class->execute($sql, $formdata);
+            }
+            $sql = $this->apply_emptybehavior_postprocess($sql, $filters);
+        }
+
+        $prepareoptions = [
+            'restrictive' => ($mode === BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE),
+        ];
+        return $this->prepare_sql($sql, $prepareoptions);
+    }
+
+    /**
+     * Replace remaining filter placeholders according to per-filter empty behaviour.
+     *
+     * @param string $sql
+     * @param array $filters
+     * @return string
+     */
+    private function apply_emptybehavior_postprocess(string $sql, array $filters): string {
+        global $CFG;
+
+        if (!preg_match_all('/%%FILTER_[^%]+%%/i', $sql, $matches)) {
+            return $sql;
+        }
+
+        require_once($CFG->dirroot . '/blocks/configurable_reports/classes/filter_sql_analyzer.php');
+
+        foreach ($matches[0] as $placeholder) {
+            $inner = trim($placeholder, '%');
+            $ph = [
+                'full' => $placeholder,
+                'inner' => $inner,
+                'name' => self::placeholder_token_name($inner),
+                'payload' => self::placeholder_token_payload($inner),
+            ];
+
+            foreach ($filters as $f) {
+                require_once($CFG->dirroot . '/blocks/configurable_reports/components/filters/' . $f['pluginname'] .
+                    '/plugin.class.php');
+                $classname = 'plugin_' . $f['pluginname'];
+                $class = new $classname($this->config);
+                $formdata = (object) ($f['formdata'] ?? new stdClass());
+
+                if (!\block_configurable_reports\filter_sql_analyzer::placeholder_matches_filter_public(
+                    $ph,
+                    $f['pluginname'],
+                    $formdata
+                )) {
+                    continue;
+                }
+
+                if ($class->get_emptybehavior($formdata) === 'false') {
+                    $sql = str_replace($placeholder, $class->get_restrictive_replacement($placeholder), $sql);
+                }
+                break;
+            }
+        }
+
+        return $sql;
+    }
+
+    /**
+     * @param string $inner
+     * @return string
+     */
+    private static function placeholder_token_name(string $inner): string {
+        $colon = strpos($inner, ':');
+        if ($colon === false) {
+            return strtoupper($inner);
+        }
+        return strtoupper(substr($inner, 0, $colon));
+    }
+
+    /**
+     * @param string $inner
+     * @return string
+     */
+    private static function placeholder_token_payload(string $inner): string {
+        $colon = strpos($inner, ':');
+        if ($colon === false) {
+            return '';
+        }
+        return substr($inner, $colon + 1);
+    }
+
+    /**
      * prepare_sql
      *
      * @param string $sql
+     * @param array $options Optional flags: restrictive (bool).
      * @return array|string|string[]
      */
-    public function prepare_sql(string $sql) {
+    public function prepare_sql(string $sql, array $options = []) {
         global $USER, $CFG, $COURSE;
+
+        $restrictive = !empty($options['restrictive']);
 
         // Enable debug mode from SQL query.
         $this->config->debug = strpos($sql, '%%DEBUG%%') !== false;
@@ -94,6 +214,9 @@ class report_sql extends report_base {
             $sql = str_replace('%%FILTER_VAR%%', $filtervar, $sql);
         }
 
+        $starttime = $restrictive ? '0' : '0';
+        $endtime = $restrictive ? '0' : '2145938400';
+
         // See http://en.wikipedia.org/wiki/Year_2038_problem.
         $sql = str_replace([
             '%%USERID%%',
@@ -103,8 +226,13 @@ class report_sql extends report_base {
             '%%ENDTIME%%',
             '%%WWWROOT%%',
         ],
-            [$USER->id, $COURSE->id, $COURSE->category, '0', '2145938400', $CFG->wwwroot],
+            [$USER->id, $COURSE->id, $COURSE->category, $starttime, $endtime, $CFG->wwwroot],
             $sql);
+
+        if ($restrictive) {
+            $sql = preg_replace('/%%FILTER_[^%]+%%/i', ' AND 1=0 ', $sql);
+        }
+
         $sql = preg_replace('/%{2}[^%]+%{2}/i', '', $sql);
 
         return str_replace('?', '[[QUESTIONMARK]]', $sql);
@@ -114,16 +242,26 @@ class report_sql extends report_base {
      * execute_query
      *
      * @param string $sql
+     * @param array|int $options validation options array, or legacy ignored int.
      * @return mixed
      */
-    public function execute_query($sql) {
+    public function execute_query($sql, $options = []) {
+        if (!is_array($options)) {
+            $options = [];
+        }
         global $remotedb, $DB, $CFG;
+
+        $validation = !empty($options['validation']);
+        $maxrows = $options['maxrows'] ?? null;
 
         $sql = preg_replace('/\bprefix_(?=\w+)/i', $CFG->prefix, $sql);
 
         $reportlimit = get_config('block_configurable_reports', 'reportlimit');
         if (empty($reportlimit) || $reportlimit == '0') {
             $reportlimit = BLOCK_CONFIGURABLE_REPORTS_MAX_RECORDS;
+        }
+        if ($maxrows !== null) {
+            $reportlimit = min((int) $maxrows, (int) $reportlimit);
         }
 
         $starttime = microtime(true);
@@ -135,14 +273,41 @@ class report_sql extends report_base {
             $results = $remotedb->get_recordset_sql($sql, null, 0, $reportlimit);
         }
 
-        // Update the execution time in the DB.
-        $updaterecord = $DB->get_record('block_configurable_reports', ['id' => $this->config->id]);
-        $updaterecord->lastexecutiontime = round((microtime(true) - $starttime) * 1000);
-        $this->config->lastexecutiontime = $updaterecord->lastexecutiontime;
-
-        $DB->update_record('block_configurable_reports', $updaterecord);
+        if (!$validation && !empty($this->config->id)) {
+            // Update the execution time in the DB.
+            $updaterecord = $DB->get_record('block_configurable_reports', ['id' => $this->config->id]);
+            if ($updaterecord) {
+                $updaterecord->lastexecutiontime = round((microtime(true) - $starttime) * 1000);
+                $this->config->lastexecutiontime = $updaterecord->lastexecutiontime;
+                $DB->update_record('block_configurable_reports', $updaterecord);
+            }
+        }
 
         return $results;
+    }
+
+    /**
+     * Validate SQL syntax by running a restrictive version of the query.
+     *
+     * @param string $rawsql
+     * @return string|null Error message or null if valid.
+     */
+    public function validate_query_sql(string $rawsql): ?string {
+        core_php_time_limit::raise(60);
+
+        try {
+            $sql = $this->build_sql_from_config($rawsql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE);
+            $rs = $this->execute_query($sql, ['validation' => true, 'maxrows' => 1]);
+            if ($rs) {
+                $rs->close();
+            }
+        } catch (dml_read_exception $e) {
+            return get_string('queryfailed', 'block_configurable_reports', $e->error);
+        } catch (moodle_exception $e) {
+            return $e->getMessage();
+        }
+
+        return null;
     }
 
     /**
@@ -155,32 +320,18 @@ class report_sql extends report_base {
 
         $components = cr_unserialize($this->config->components);
 
-        $filters = $components['filters']['elements'] ?? [];
         $calcs = $components['calcs']['elements'] ?? [];
 
         $tablehead = [];
         $finalcalcs = [];
         $finaltable = [];
 
-        $components = cr_unserialize($this->config->components);
         $config = $components['customsql']['config'] ?? new stdClass;
         $totalrecords = 0;
 
         $sql = '';
         if (isset($config->querysql)) {
-            // Filters.
-            $sql = $config->querysql;
-            if (!empty($filters)) {
-                foreach ($filters as $f) {
-                    require_once($CFG->dirroot . '/blocks/configurable_reports/components/filters/' . $f['pluginname'] .
-                        '/plugin.class.php');
-                    $classname = 'plugin_' . $f['pluginname'];
-                    $class = new $classname($this->config);
-                    $sql = $class->execute($sql, $f['formdata']);
-                }
-            }
-
-            $sql = $this->prepare_sql($sql);
+            $sql = $this->build_sql_from_config($config->querysql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_NORMAL);
 
             if ($rs = $this->execute_query($sql)) {
                 foreach ($rs as $row) {
@@ -199,6 +350,7 @@ class report_sql extends report_base {
                     $totalrecords++;
                     $finaltable[] = $arrayrow;
                 }
+                $rs->close();
             }
         }
         $this->sql = $sql;

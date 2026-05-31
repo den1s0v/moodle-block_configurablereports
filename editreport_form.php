@@ -114,6 +114,25 @@ class report_edit_form extends moodleform {
         $mform->addHelpButton('remote', 'remote', 'block_configurable_reports');
         $mform->setDefault('remote', 0);
 
+        $globalsubmit = (bool) get_config('block_configurable_reports', 'requirefiltersubmit');
+        $inheritlabel = get_string('requirefiltersubmit_inherit', 'block_configurable_reports', (object) [
+            'current' => $globalsubmit ? get_string('yes') : get_string('no'),
+        ]);
+        $submitoptions = [
+            (string) BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT => $inheritlabel,
+            '1' => get_string('requirefiltersubmit_yes', 'block_configurable_reports'),
+            '0' => get_string('requirefiltersubmit_no', 'block_configurable_reports'),
+        ];
+        $mform->addElement(
+            'select',
+            'requirefiltersubmit',
+            get_string('requirefiltersubmit', 'block_configurable_reports'),
+            $submitoptions
+        );
+        $mform->addHelpButton('requirefiltersubmit', 'requirefiltersubmit', 'block_configurable_reports');
+        $mform->setDefault('requirefiltersubmit', BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT);
+        $mform->disabledIf('requirefiltersubmit', 'type', 'neq', 'sql');
+
         // Adds an embed link for easy copy/paste once the report is saved.
         if (isset($this->_customdata['report']->id) && $this->_customdata['report']->id) {
 
