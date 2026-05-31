@@ -137,7 +137,7 @@ class filter_sql_analyzer {
                 $row->status = $row->duplicate ? 'duplicate' : 'used';
             }
 
-            $result->filterrows[] = $row;
+            $result->filterrows[$index] = $row;
         }
 
         foreach ($filterplaceholders as $ph) {
@@ -223,9 +223,9 @@ class filter_sql_analyzer {
     private static function token_name(string $inner): string {
         $colon = strpos($inner, ':');
         if ($colon === false) {
-            return strtoupper($inner);
+            return $inner;
         }
-        return strtoupper(substr($inner, 0, $colon));
+        return substr($inner, 0, $colon);
     }
 
     /**
@@ -245,7 +245,29 @@ class filter_sql_analyzer {
      * @return bool
      */
     private static function is_system_placeholder(string $name): bool {
-        return in_array($name, self::SYSTEM_PLACEHOLDERS, true);
+        return in_array(strtoupper($name), self::SYSTEM_PLACEHOLDERS, true);
+    }
+
+    /**
+     * Case-insensitive token name comparison.
+     *
+     * @param string $name
+     * @param string $expected
+     * @return bool
+     */
+    private static function token_equals(string $name, string $expected): bool {
+        return strcasecmp($name, $expected) === 0;
+    }
+
+    /**
+     * Case-insensitive token prefix check.
+     *
+     * @param string $name
+     * @param string $prefix
+     * @return bool
+     */
+    private static function token_starts_with(string $name, string $prefix): bool {
+        return strncasecmp($name, $prefix, strlen($prefix)) === 0;
     }
 
     /**
@@ -259,36 +281,39 @@ class filter_sql_analyzer {
 
         switch ($pluginname) {
             case 'searchtext':
-                if ($name === 'FILTER_SEARCHTEXT') {
+                if (self::token_equals($name, 'FILTER_SEARCHTEXT')) {
                     return empty($formdata->idnumber);
                 }
                 if (!empty($formdata->idnumber)) {
-                    return $name === 'FILTER_SEARCHTEXT_' . $formdata->idnumber;
+                    return self::token_equals($name, 'FILTER_SEARCHTEXT_' . $formdata->idnumber);
                 }
                 return false;
 
             case 'fuserfield':
-                if ($name === 'FILTER_USERS') {
+                if (self::token_equals($name, 'FILTER_USERS')) {
                     return true;
                 }
-                if (!empty($formdata->field) && $name === 'FILTER_USERS_' . $formdata->field) {
-                    return true;
+                if (!empty($formdata->field)) {
+                    return self::token_equals($name, 'FILTER_USERS_' . $formdata->field);
                 }
                 return false;
 
             case 'fsearchuserfield':
-                return $name === 'FILTER_USERS';
+                return self::token_equals($name, 'FILTER_USERS');
 
             case 'startendtime':
-                return $name === 'FILTER_STARTTIME' || $name === 'FILTER_ENDTIME';
+                return self::token_equals($name, 'FILTER_STARTTIME')
+                    || self::token_equals($name, 'FILTER_ENDTIME');
 
             case 'coursemodules':
-                return in_array($name, ['FILTER_COURSEMODULEID', 'FILTER_COURSEMODULEFIELDS', 'FILTER_COURSEMODULE'], true);
+                return self::token_equals($name, 'FILTER_COURSEMODULEID')
+                    || self::token_equals($name, 'FILTER_COURSEMODULEFIELDS')
+                    || self::token_equals($name, 'FILTER_COURSEMODULE');
 
             default:
                 $registry = self::FILTER_REGISTRY;
                 foreach ($registry as $prefix => $mapped) {
-                    if ($name === $prefix || strpos($name, $prefix . '_') === 0) {
+                    if (self::token_equals($name, $prefix) || self::token_starts_with($name, $prefix . '_')) {
                         if (is_array($mapped)) {
                             return in_array($pluginname, $mapped, true);
                         }
@@ -305,14 +330,14 @@ class filter_sql_analyzer {
      */
     private static function suggest_plugins(string $name): array {
         foreach (self::FILTER_REGISTRY as $prefix => $mapped) {
-            if ($name === $prefix || strpos($name, $prefix . '_') === 0) {
+            if (self::token_equals($name, $prefix) || self::token_starts_with($name, $prefix . '_')) {
                 return is_array($mapped) ? $mapped : [$mapped];
             }
         }
-        if (strpos($name, 'FILTER_SEARCHTEXT') === 0) {
+        if (self::token_starts_with($name, 'FILTER_SEARCHTEXT')) {
             return ['searchtext'];
         }
-        if (strpos($name, 'FILTER_USERS') === 0) {
+        if (self::token_starts_with($name, 'FILTER_USERS')) {
             return ['fuserfield', 'fsearchuserfield'];
         }
         return [];
@@ -324,13 +349,13 @@ class filter_sql_analyzer {
      */
     private static function prefill_for_placeholder(array $ph): \stdClass {
         $prefill = (object) [];
-        $name = $ph['name'];
-        if (strpos($name, 'FILTER_SEARCHTEXT_') === 0) {
-            $prefill->idnumber = substr($name, strlen('FILTER_SEARCHTEXT_'));
-        } else if ($name === 'FILTER_SEARCHTEXT') {
+        $inner = $ph['inner'];
+        if (preg_match('/^FILTER_SEARCHTEXT_([^:]+)/i', $inner, $matches)) {
+            $prefill->idnumber = $matches[1];
+        } else if (self::token_equals(self::token_name($inner), 'FILTER_SEARCHTEXT')) {
             $prefill->idnumber = '';
-        } else if (strpos($name, 'FILTER_USERS_') === 0) {
-            $prefill->field = substr($name, strlen('FILTER_USERS_'));
+        } else if (preg_match('/^FILTER_USERS_([^:]+)/i', $inner, $matches)) {
+            $prefill->field = $matches[1];
         }
         $parts = explode(':', $ph['payload']);
         if (!empty($parts[0])) {
@@ -359,7 +384,7 @@ class filter_sql_analyzer {
             }
         }
         foreach ($filterplaceholders as $ph) {
-            if ($ph['name'] === 'FILTER_STARTTIME' || $ph['name'] === 'FILTER_ENDTIME') {
+            if (self::token_equals($ph['name'], 'FILTER_STARTTIME') || self::token_equals($ph['name'], 'FILTER_ENDTIME')) {
                 return false;
             }
         }

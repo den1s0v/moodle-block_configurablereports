@@ -174,9 +174,9 @@ class report_sql extends report_base {
     private static function placeholder_token_name(string $inner): string {
         $colon = strpos($inner, ':');
         if ($colon === false) {
-            return strtoupper($inner);
+            return $inner;
         }
-        return strtoupper(substr($inner, 0, $colon));
+        return substr($inner, 0, $colon);
     }
 
     /**
