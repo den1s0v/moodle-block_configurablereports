@@ -75,4 +75,9 @@ class fuserfield_form extends moodleform {
         $this->_customdata['pluginclass']->add_filter_config_action_buttons($this, $this->_customdata);
     }
 
+    public function definition_after_data(): void {
+        parent::definition_after_data();
+        $this->_customdata['pluginclass']->filter_config_definition_after_data($this, $this->_form, $this->_customdata);
+    }
+
 }

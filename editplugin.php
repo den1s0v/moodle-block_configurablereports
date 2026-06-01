@@ -29,7 +29,7 @@ require_once($CFG->dirroot . "/blocks/configurable_reports/locallib.php");
 
 $id = required_param('id', PARAM_INT);
 $comp = required_param('comp', PARAM_ALPHA);
-$cid = optional_param('cid', '', PARAM_ALPHANUM);
+$cid = optional_param('cid', '', PARAM_RAW);
 $pname = optional_param('pname', '', PARAM_ALPHA);
 
 $moveup = optional_param('moveup', 0, PARAM_INT);
@@ -146,7 +146,11 @@ if (isset($pluginclass->form) && $pluginclass->form) {
         $formurlparams['cid'] = $cid;
     }
     $formurl = new moodle_url('/blocks/configurable_reports/editplugin.php', $formurlparams);
-    $editform = new $classname($formurl, compact('comp', 'cid', 'id', 'pluginclass', 'compclass', 'report', 'reportclass'));
+    $formcustomdata = compact('comp', 'cid', 'id', 'pluginclass', 'compclass', 'report', 'reportclass');
+    $formcustomdata['submitlabel'] = ($cid !== '')
+        ? get_string('filterconfig_save', 'block_configurable_reports')
+        : get_string('add', 'block_configurable_reports');
+    $editform = new $classname($formurl, $formcustomdata);
 
     if (!empty($cdata)) {
         $formdata = (object) $cdata['formdata'];
@@ -171,11 +175,8 @@ if (isset($pluginclass->form) && $pluginclass->form) {
     }
 
     if ($editform->is_cancelled()) {
-        if (!empty($report)) {
-            redirect($CFG->wwwroot . '/blocks/configurable_reports/editreport.php?id=' . $report->id);
-        } else {
-            redirect($CFG->wwwroot . '/blocks/configurable_reports/editreport.php');
-        }
+        redirect(new moodle_url('/blocks/configurable_reports/editcomp.php', ['id' => $id, 'comp' => $comp]));
+        exit;
     } else if ($data = $editform->get_data()) {
         if (!empty($cdata)) {
             $cdata['formdata'] = $data;

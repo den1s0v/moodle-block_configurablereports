@@ -151,20 +151,20 @@ abstract class plugin_base {
     }
 
     /**
-     * Add checkbox to enable a starter default for the report filter form.
+     * Submit button caption for filter configuration form (add vs edit).
      *
-     * @param MoodleQuickForm $mform
-     * @return void
-     */
-    /**
-     * Submit button label for filter plugin configuration form (add vs edit).
-     *
-     * @param array $customdata moodleform custom data (expects optional cid)
+     * @param array|object|null $customdata
      * @return string
      */
-    public function get_filter_config_submit_label(array $customdata): string {
-        if (!empty($customdata['cid'])) {
-            return get_string('update');
+    protected function get_filter_config_submit_caption($customdata = null): string {
+        if (is_object($customdata)) {
+            $customdata = (array) $customdata;
+        }
+        if (is_array($customdata) && !empty($customdata['submitlabel'])) {
+            return $customdata['submitlabel'];
+        }
+        if (optional_param('cid', '', PARAM_RAW) !== '') {
+            return get_string('filterconfig_save', 'block_configurable_reports');
         }
         return get_string('add', 'block_configurable_reports');
     }
@@ -173,11 +173,58 @@ abstract class plugin_base {
      * Add submit/cancel buttons for filter plugin configuration form.
      *
      * @param moodleform $form
-     * @param array $customdata
+     * @param array|object|null $customdata moodleform custom data (expects submitlabel from editplugin.php)
      * @return void
      */
-    public function add_filter_config_action_buttons(moodleform $form, array $customdata): void {
-        $form->add_action_buttons(true, $this->get_filter_config_submit_label($customdata));
+    public function add_filter_config_action_buttons(moodleform $form, $customdata = null): void {
+        $form->add_action_buttons(true, $this->get_filter_config_submit_caption($customdata));
+    }
+
+    /**
+     * Re-apply submit button caption (value only; do not setLabel — avoids extra text above buttons).
+     *
+     * @param MoodleQuickForm $mform
+     * @param string $caption
+     * @return void
+     */
+    public function apply_filter_config_submit_button_value(MoodleQuickForm $mform, string $caption): void {
+        $apply = function ($el) use ($caption) {
+            if (!is_object($el) || $el->getName() !== 'submitbutton') {
+                return;
+            }
+            if (method_exists($el, 'setValue')) {
+                $el->setValue($caption);
+            }
+            if (method_exists($el, 'updateAttributes')) {
+                $el->updateAttributes(['value' => $caption]);
+            }
+        };
+        if ($mform->elementExists('submitbutton')) {
+            $apply($mform->getElement('submitbutton'));
+        }
+        foreach (['buttonar', 'buttonbar'] as $gname) {
+            if (!$mform->elementExists($gname)) {
+                continue;
+            }
+            $group = $mform->getElement($gname);
+            $children = method_exists($group, 'getElements') ? $group->getElements()
+                : (isset($group->_elements) ? $group->_elements : []);
+            foreach ($children as $child) {
+                $apply($child);
+            }
+        }
+    }
+
+    /**
+     * Re-apply submit caption after parent::definition_after_data (Moodle may reset value to «Add»).
+     *
+     * @param moodleform $form
+     * @param MoodleQuickForm $mform
+     * @param array|object|null $customdata
+     * @return void
+     */
+    public function filter_config_definition_after_data(moodleform $form, MoodleQuickForm $mform, $customdata = null): void {
+        $this->apply_filter_config_submit_button_value($mform, $this->get_filter_config_submit_caption($customdata));
     }
 
     public function add_usefilterdefault_field(MoodleQuickForm $mform): void {

@@ -117,6 +117,7 @@ $string['nofiltersyet'] = "No filters yet";
 $string['filter_all'] = 'All';
 $string['filter_apply'] = 'Apply';
 $string['filter_reset'] = 'Reset';
+$string['filterconfig_save'] = 'Save';
 $string['filter_searchtext'] = 'Search text';
 $string['searchtext'] = 'Search text';
 $string['filter_searchtext_summary'] = 'Free text filter';
