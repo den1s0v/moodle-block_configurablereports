@@ -156,6 +156,30 @@ abstract class plugin_base {
      * @param MoodleQuickForm $mform
      * @return void
      */
+    /**
+     * Submit button label for filter plugin configuration form (add vs edit).
+     *
+     * @param array $customdata moodleform custom data (expects optional cid)
+     * @return string
+     */
+    public function get_filter_config_submit_label(array $customdata): string {
+        if (!empty($customdata['cid'])) {
+            return get_string('update');
+        }
+        return get_string('add', 'block_configurable_reports');
+    }
+
+    /**
+     * Add submit/cancel buttons for filter plugin configuration form.
+     *
+     * @param moodleform $form
+     * @param array $customdata
+     * @return void
+     */
+    public function add_filter_config_action_buttons(moodleform $form, array $customdata): void {
+        $form->add_action_buttons(true, $this->get_filter_config_submit_label($customdata));
+    }
+
     public function add_usefilterdefault_field(MoodleQuickForm $mform): void {
         $mform->addElement('advcheckbox', 'usefilterdefault', '', get_string('filterdefault_enable', 'block_configurable_reports'));
         $mform->addHelpButton('usefilterdefault', 'filterdefault_enable', 'block_configurable_reports');

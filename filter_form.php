@@ -55,8 +55,13 @@ class report_edit_form extends moodleform {
         $mform->setType('id', PARAM_INT);
         $mform->setType('courseid', PARAM_INT);
 
-        // Buttons.
-        $this->add_action_buttons(true, get_string('filter_apply', 'block_configurable_reports'));
+        // Buttons (custom cancel label; is_cancelled() still applies).
+        $buttonarray = [];
+        $buttonarray[] = $mform->createElement('submit', 'submitbutton',
+            get_string('filter_apply', 'block_configurable_reports'));
+        $buttonarray[] = $mform->createElement('cancel', 'cancelbutton',
+            get_string('filter_reset', 'block_configurable_reports'));
+        $mform->addGroup($buttonarray, 'buttonar', '', ' ', false);
     }
 
 }

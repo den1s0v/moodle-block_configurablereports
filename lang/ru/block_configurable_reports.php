@@ -44,6 +44,8 @@ $string['operator_gt'] = 'Больше (>)';
 $string['operator_lte'] = 'Меньше или равно (<=)';
 $string['operator_gte'] = 'Больше или равно (>=)';
 $string['operator_unknown'] = 'Оператор: {$a}';
+$string['filter_apply'] = 'Применить';
+$string['filter_reset'] = 'Сбросить';
 $string['filtersubmitrequired'] = 'Задайте фильтры и нажмите «Применить», чтобы выполнить отчёт.';
 $string['requirefiltersubmit'] = 'Требовать отправку формы фильтров перед запуском';
 $string['requirefiltersubmit_help'] = 'Если включено, SQL-отчёты с фильтрами не выполняются, пока пользователь не отправит форму фильтров. Глобальную настройку можно переопределить для каждого отчёта.';

@@ -72,7 +72,7 @@ class fuserfield_form extends moodleform {
         $this->_customdata['pluginclass']->add_defaultvalue_field($mform);
 
         // Buttons.
-        $this->add_action_buttons(true, get_string('add'));
+        $this->_customdata['pluginclass']->add_filter_config_action_buttons($this, $this->_customdata);
     }
 
 }
