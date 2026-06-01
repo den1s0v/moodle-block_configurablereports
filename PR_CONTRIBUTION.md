@@ -27,27 +27,26 @@ This changeset improves **SQL-type** configurable reports in four areas:
 
 ## Commits
 
-| Hash | Subject |
-|------|---------|
-| `3eabd71` | feat(filters): analyze & report filters usage |
-| `381b1f2` | chore(lang): add RU translation for new strings |
-| `9192fbb` | fix: filter names mapping (case matters) |
-| `d3f4fdc` | fix(ui): more concise filter description |
-| `fd05c65` | feat(filter): filter defaults |
-| `217f244` | fix(filters): separate filter's default & empty-value policy |
-| `6472d0e` | fix(filters): typing, param_exists polyfill |
-| `4a8d523` | fix(ui): remove label having duplicated info |
-| `c379bda` | fix(ui): text on submit buttons |
-| `4a10ed4` | fix(ui): fixing button label - `Save`, not `Add` |
-| `e73e9be` | feat(sql): validation via EXPLAIN, draft |
-| `58c99a0` | refactor: extract exception class |
+
+- feat(filters): analyze & report filters usage
+- chore(lang): add RU translation for new strings
+- fix: filter names mapping (case matters)
+- fix(ui): more concise filter description
+- feat(filter): filter defaults
+- fix(filters): separate filter's default & empty-value policy
+- fix(filters): typing, param_exists polyfill
+- fix(ui): remove label having duplicated info
+- fix(ui): text on submit buttons
+- fix(ui): fixing button label - `Save`, not `Add`
+- feat(sql): validation via EXPLAIN, draft
+- refactor: extract exception class
 
 ---
 
 ## Database
 
 - **New column** `block_configurable_reports.requirefiltersubmit` (`INT`, default `-1`: inherit / `0` off / `1` on).
-- **Upgrade:** `db/upgrade.php` step `2027050402`.
+- **Upgrade:** `db/upgrade.php` step `2027050500` (aligned with `version.php`).
 - **install.xml** updated for fresh installs.
 
 ---
@@ -72,7 +71,7 @@ Per-report override: `editreport_form.php` → `requirefiltersubmit` (inherit / 
 - **RESTRICTIVE:** filter plugins are **not** run; `prepare_sql(['restrictive' => true])` replaces remaining `%%FILTER_*%%` with ` AND 1=0 ` and sets `%%STARTTIME%%` / `%%ENDTIME%%` to `0`.
 - `validate_query_sql()` — restrictive build → optional EXPLAIN → else `execute_query(..., ['validation' => true, 'maxrows' => 1])` (no `lastexecutiontime` update).
 - `normalize_sql_prefixes()` — shared `prefix_` → site prefix replacement.
-- `ExplainUnsupportedException` — unsupported DB family for EXPLAIN → silent fallback to execute.
+- `block_configurable_reports\exceptions\explain_unsupported_exception` — unsupported DB family for EXPLAIN → fallback to execute.
 
 ### Filter analyser (`classes/filter_sql_analyzer.php`)
 
@@ -107,7 +106,7 @@ Per-report override: `editreport_form.php` → `requirefiltersubmit` (inherit / 
 | Area | Files |
 |------|--------|
 | Core / SQL | `reports/sql/report.class.php`, `report.class.php`, `locallib.php`, `viewreport.php` |
-| New classes | `classes/filter_sql_analyzer.php`, `classes/ExplainUnsupportedException.php` |
+| New classes | `classes/filter_sql_analyzer.php`, `classes/exceptions/explain_unsupported_exception.php` |
 | DB | `db/install.xml`, `db/upgrade.php`, `version.php` |
 | Settings / report edit | `settings.php`, `editreport_form.php`, `editreport.php`, `filter_form.php` |
 | UI | `editcomp.php`, `editplugin.php` |
@@ -136,23 +135,20 @@ Per-report override: `editreport_form.php` → `requirefiltersubmit` (inherit / 
 
 ## Code review notes (smells, redundancy, pre-PR cleanup)
 
+### Addressed in follow-up cleanup
+
+1. **Exception autoload** — `classes/exceptions/explain_unsupported_exception.php`, class `block_configurable_reports\exceptions\explain_unsupported_exception`.
+2. **Removed dead `mariadb` case** in `build_explain_sql()`.
+3. **`prefixes_normalized` option** on validation `execute_query()` — avoids double `normalize_sql_prefixes()`.
+4. **Narrow EXPLAIN catch** — `explain_unsupported_exception` + `dml_exception`; other `Throwable` rethrown when `DEBUG_DEVELOPER`.
+5. **Upgrade savepoint** — `2027050500`, matches `version.php`.
+6. **Duplicate `allowedsqlusers` setting** removed from `settings.php`.
+
 ### Worth fixing before / during PR review
 
-1. **Commit message `e73e9be` — “draft”** — Rename or squash to a final message (e.g. `feat(sql): optional EXPLAIN for custom SQL validation`) before upstream submission.
-
-2. **`ExplainUnsupportedException` file naming vs Moodle autoload** — Class/file use PascalCase (`classes/ExplainUnsupportedException.php`). Moodle plugin autoload usually expects **lowercase** frankenstyle paths (`classes/explain_unsupported_exception.php`). Verify on a **case-sensitive** Linux CI host; rename to Moodle convention if autoload fails.
-
-3. **Dead branch `case 'mariadb':` in `build_explain_sql()`** — `$remotedb->get_dbfamily()` returns `mysql` for MariaDB in Moodle; the `mariadb` case is unreachable (harmless redundancy).
-
-4. **Double `normalize_sql_prefixes()`** — `validate_query_sql()` normalizes before EXPLAIN/execute; `execute_query()` normalizes again on fallback. Idempotent but redundant; optional: skip second pass when SQL is already normalized (low priority).
-
-5. **Broad `catch (Throwable)` around EXPLAIN** — Intentional for fallback, but also hides unexpected bugs silently. Consider catching `\block_configurable_reports\ExplainUnsupportedException` + `dml_exception` only, and rethrowing others in `DEBUG_DEVELOPER`.
-
-6. **Version vs upgrade step** — `version.php` = `2027050500`, upgrade savepoint = `2027050402`. Works (upgrade runs when old &lt; step), but aligning version to the last upgrade step avoids confusion.
+_(none critical from initial review)_
 
 ### Pre-existing (not introduced by this branch; optional separate issue)
-
-7. **`settings.php` — duplicate `allowedsqlusers` admin_setting** (registered twice, lines ~134 and ~140). Should be removed in a small cleanup PR.
 
 8. **`customsql_form` — `singlerow` validation branch** — Field not in form; dead code from upstream (unchanged behaviour).
 
