@@ -25,7 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['filterusage_column'] = 'Использование в SQL';
-$string['filterusage_used'] = 'Используется в запросе: {$a->detail}';
+$string['filterusage_used'] = 'В SQL: {$a->field}{$a->op}';
+$string['filterusage_op'] = ' · {$a->op} ({$a->oplabel})';
 $string['filterusage_notfound'] = 'Не найдено в SQL';
 $string['filterusage_duplicate'] = 'Дублирование привязки плейсхолдера';
 $string['filterusage_detail_field'] = 'Поле: {$a->field}';

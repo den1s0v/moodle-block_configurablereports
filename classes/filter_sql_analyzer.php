@@ -125,7 +125,7 @@ class filter_sql_analyzer {
 
             foreach ($filterplaceholders as $ph) {
                 if (self::placeholder_matches_filter($ph, $element['pluginname'], $formdata)) {
-                    $row->usages[] = self::describe_usage($ph);
+                    $row->usages[] = self::usage_part_from_placeholder($ph);
                     if (isset($claimed[$ph['inner']])) {
                         $row->duplicate = true;
                     }
@@ -150,7 +150,7 @@ class filter_sql_analyzer {
                 'inner' => $ph['inner'],
                 'name' => $ph['name'],
                 'payload' => $ph['payload'],
-                'detail' => self::describe_usage($ph),
+                'detail' => self::format_usage_html(self::usage_part_from_placeholder($ph)),
                 'suggestedplugins' => $plugins,
                 'prefill' => self::prefill_for_placeholder($ph),
             ];
@@ -196,24 +196,71 @@ class filter_sql_analyzer {
     }
 
     /**
+     * Build usage data from a placeholder token.
+     *
      * @param array $ph Placeholder info.
-     * @return string
+     * @return \stdClass field, operator, operatorlabel
      */
-    private static function describe_usage(array $ph): string {
+    private static function usage_part_from_placeholder(array $ph): \stdClass {
         $parts = explode(':', $ph['payload']);
         $field = $parts[0] ?? $ph['payload'];
         $operator = $parts[1] ?? '';
+        $usage = (object) [
+            'field' => $field,
+            'operator' => $operator,
+            'operatorlabel' => '',
+        ];
         if ($operator !== '') {
-            $oplabel = self::operator_label($operator);
-            return get_string('filterusage_detail_fieldop', 'block_configurable_reports', (object) [
-                'field' => $field,
-                'operator' => $operator,
-                'operatorlabel' => $oplabel,
+            $usage->operatorlabel = self::operator_label($operator);
+        }
+        return $usage;
+    }
+
+    /**
+     * Format one placeholder usage for display in the filters table.
+     *
+     * @param \stdClass $usage From usage_part_from_placeholder().
+     * @return string HTML
+     */
+    public static function format_usage_html(\stdClass $usage): string {
+        $fieldhtml = \html_writer::tag('code', s($usage->field));
+        $opfragment = '';
+        if (!empty($usage->operator)) {
+            $opfragment = get_string('filterusage_op', 'block_configurable_reports', (object) [
+                'op' => s($usage->operator),
+                'oplabel' => s($usage->operatorlabel),
             ]);
         }
-        return get_string('filterusage_detail_field', 'block_configurable_reports', (object) [
-            'field' => $field,
+        return get_string('filterusage_used', 'block_configurable_reports', (object) [
+            'field' => $fieldhtml,
+            'op' => $opfragment,
         ]);
+    }
+
+    /**
+     * Format multiple usages for one filter row.
+     *
+     * @param array $usages Array of usage stdClass objects.
+     * @return string HTML
+     */
+    public static function format_usages_html(array $usages): string {
+        $lines = [];
+        foreach ($usages as $usage) {
+            $lines[] = self::format_usage_html($usage);
+        }
+        return implode('<br />', $lines);
+    }
+
+    /**
+     * Format "not found in SQL" status with warning styling.
+     *
+     * @return string HTML
+     */
+    public static function format_notfound_html(): string {
+        return \html_writer::span(
+            get_string('filterusage_notfound', 'block_configurable_reports'),
+            'badge rounded-pill bg-warning text-dark'
+        );
     }
 
     /**

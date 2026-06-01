@@ -587,7 +587,8 @@ $string['csvdelimiterinfo'] = 'CSV delimiter: "colon" for ":", "comma" for ",", 
 
 // Filter SQL analysis and execution behaviour.
 $string['filterusage_column'] = 'SQL usage';
-$string['filterusage_used'] = 'Used in query: {$a->detail}';
+$string['filterusage_used'] = 'In SQL: {$a->field}{$a->op}';
+$string['filterusage_op'] = ' · {$a->op} ({$a->oplabel})';
 $string['filterusage_notfound'] = 'Not found in SQL';
 $string['filterusage_duplicate'] = 'Duplicate placeholder binding';
 $string['filterusage_detail_field'] = 'Field: {$a->field}';

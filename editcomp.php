@@ -206,18 +206,14 @@ if ($elements) {
 
         $rowdata = ['c' . ($i + 1), $e['pluginfullname'], $e['summary']];
         if ($filteranalysis !== null) {
-            $usagecell = get_string('filterusage_notfound', 'block_configurable_reports');
+            $usagecell = \block_configurable_reports\filter_sql_analyzer::format_notfound_html();
             if (isset($filteranalysis->filterrows[$idx])) {
                 $userow = $filteranalysis->filterrows[$idx];
                 if ($userow->status === 'used') {
-                    $usagecell = get_string('filterusage_used', 'block_configurable_reports', (object) [
-                        'detail' => implode('; ', $userow->usages),
-                    ]);
+                    $usagecell = \block_configurable_reports\filter_sql_analyzer::format_usages_html($userow->usages);
                 } else if ($userow->status === 'duplicate') {
                     $usagecell = get_string('filterusage_duplicate', 'block_configurable_reports') . '<br />' .
-                        get_string('filterusage_used', 'block_configurable_reports', (object) [
-                            'detail' => implode('; ', $userow->usages),
-                        ]);
+                        \block_configurable_reports\filter_sql_analyzer::format_usages_html($userow->usages);
                 }
             }
             $rowdata[] = $usagecell;
