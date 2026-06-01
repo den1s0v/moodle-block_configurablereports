@@ -221,6 +221,19 @@ abstract class plugin_base {
     }
 
     /**
+     * Whether a report filter parameter was present in the current HTTP request.
+     *
+     * @param string $paramname
+     * @return bool
+     */
+    public function is_filter_param_in_request(string $paramname): bool {
+        if (function_exists('param_exists')) {
+            return param_exists($paramname);
+        }
+        return array_key_exists($paramname, $_POST) || array_key_exists($paramname, $_GET);
+    }
+
+    /**
      * Whether the configured default should be used for this request parameter.
      *
      * @param object $formdata
@@ -229,7 +242,7 @@ abstract class plugin_base {
      */
     public function should_apply_default_for_param(object $formdata, string $paramname): bool {
         return $this->should_use_default_when_empty($formdata)
-            && !param_exists($paramname);
+            && !$this->is_filter_param_in_request($paramname);
     }
 
     /**
@@ -237,10 +250,10 @@ abstract class plugin_base {
      *
      * @param string $paramname
      * @param object $formdata
-     * @param int $paramtype
+     * @param string|int $paramtype PARAM_* constant
      * @return string
      */
-    public function resolve_text_filter_param(string $paramname, object $formdata, int $paramtype = PARAM_RAW): string {
+    public function resolve_text_filter_param(string $paramname, object $formdata, $paramtype = PARAM_RAW): string {
         if ($this->should_apply_default_for_param($formdata, $paramname)) {
             return $this->get_default_filter_value($formdata) ?? '';
         }
@@ -252,10 +265,10 @@ abstract class plugin_base {
      *
      * @param string $paramname
      * @param object $formdata
-     * @param int $paramtype
+     * @param string|int $paramtype PARAM_* constant
      * @return string
      */
-    public function resolve_encoded_filter_param(string $paramname, object $formdata, int $paramtype = PARAM_RAW): string {
+    public function resolve_encoded_filter_param(string $paramname, object $formdata, $paramtype = PARAM_RAW): string {
         if ($this->should_apply_default_for_param($formdata, $paramname)) {
             return $this->get_default_filter_value_encoded($formdata) ?? '';
         }
