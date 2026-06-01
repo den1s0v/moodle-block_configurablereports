@@ -65,6 +65,7 @@ class fsearchuserfield_form extends moodleform {
         $mform->addElement('select', 'field', get_string('field', 'block_configurable_reports'), $usercolumns);
 
         $this->_customdata['pluginclass']->add_emptybehavior_field($mform);
+        $this->_customdata['pluginclass']->add_usefilterdefault_field($mform);
         $this->_customdata['pluginclass']->add_defaultvalue_field($mform);
 
         // Buttons.

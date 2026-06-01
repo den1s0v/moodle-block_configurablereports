@@ -79,14 +79,7 @@ class plugin_fsearchuserfield extends plugin_base {
      */
     private function execute_sql($finalelements, object $data) {
         $paramname = 'filter_fuserfield_' . $data->field;
-        $filterfuserfield = optional_param($paramname, null, PARAM_RAW);
-        if ($filterfuserfield === null || $filterfuserfield === '' || $filterfuserfield === '0') {
-            if ($this->should_use_default_when_empty($data)) {
-                $filterfuserfield = $this->get_default_filter_value_encoded($data);
-            } else {
-                $filterfuserfield = '';
-            }
-        }
+        $filterfuserfield = $this->resolve_encoded_filter_param($paramname, $data, PARAM_RAW);
         $filter = $filterfuserfield ? clean_param(base64_decode($filterfuserfield), PARAM_TEXT) : '';
 
         if ($filterfuserfield && preg_match("/%%FILTER_USERS:([^%]+)%%/i", $finalelements, $output)) {
@@ -109,14 +102,7 @@ class plugin_fsearchuserfield extends plugin_base {
         global $remotedb;
 
         $paramname = 'filter_fuserfield_' . $data->field;
-        $filterfuserfield = optional_param($paramname, null, PARAM_RAW);
-        if ($filterfuserfield === null || $filterfuserfield === '' || $filterfuserfield === '0') {
-            if ($this->should_use_default_when_empty($data)) {
-                $filterfuserfield = $this->get_default_filter_value_encoded($data);
-            } else {
-                $filterfuserfield = '';
-            }
-        }
+        $filterfuserfield = $this->resolve_encoded_filter_param($paramname, $data, PARAM_RAW);
 
         if ($filterfuserfield) {
             // Function addslashes is done in clean param.
@@ -234,9 +220,11 @@ class plugin_fsearchuserfield extends plugin_base {
         $filtername = 'filter_fuserfield_' . $formdata->field;
         $mform->addElement('select', $filtername, $selectname, $filteroptions);
         $mform->setType($filtername, PARAM_RAW);
-        $filterfuserfield = optional_param($filtername, null, PARAM_RAW);
-        if ($filterfuserfield === null && $formdata && $this->should_use_default_when_empty($formdata)) {
-            $mform->setDefault($filtername, $this->get_default_filter_value_encoded($formdata));
+        $defaultvalue = $formdata
+            ? $this->resolve_encoded_filter_param($filtername, $formdata, PARAM_RAW)
+            : optional_param($filtername, '', PARAM_RAW);
+        if ($defaultvalue !== '') {
+            $mform->setDefault($filtername, $defaultvalue);
         }
     }
 

@@ -144,18 +144,28 @@ abstract class plugin_base {
         $options = [
             'omit' => get_string('emptybehavior_omit', 'block_configurable_reports'),
             'false' => get_string('emptybehavior_false', 'block_configurable_reports'),
-            'default' => get_string('emptybehavior_default', 'block_configurable_reports'),
         ];
         $mform->addElement('select', 'emptybehavior', get_string('emptybehavior', 'block_configurable_reports'), $options);
         $mform->setDefault('emptybehavior', 'omit');
         $mform->addHelpButton('emptybehavior', 'emptybehavior', 'block_configurable_reports');
-        $mform->addElement('static', 'emptybehavior_intro', '',
-            get_string('emptybehavior_intro', 'block_configurable_reports'));
-        $mform->hideIf('emptybehavior_intro', 'emptybehavior', 'neq', 'default');
     }
 
     /**
-     * Add default filter value field (shown when emptybehavior is "default").
+     * Add checkbox to enable a starter default for the report filter form.
+     *
+     * @param MoodleQuickForm $mform
+     * @return void
+     */
+    public function add_usefilterdefault_field(MoodleQuickForm $mform): void {
+        $mform->addElement('advcheckbox', 'usefilterdefault', '', get_string('filterdefault_enable', 'block_configurable_reports'));
+        $mform->addHelpButton('usefilterdefault', 'filterdefault_enable', 'block_configurable_reports');
+        $mform->addElement('static', 'filterdefault_intro', '',
+            get_string('filterdefault_intro', 'block_configurable_reports'));
+        $mform->hideIf('filterdefault_intro', 'usefilterdefault', 'notchecked');
+    }
+
+    /**
+     * Add default filter value field (shown when usefilterdefault is checked).
      *
      * @param MoodleQuickForm $mform
      * @return void
@@ -165,11 +175,11 @@ abstract class plugin_base {
         $mform->addElement('text', 'defaultvalue', get_string('emptyfilter_defaultvalue', 'block_configurable_reports'),
             ['placeholder' => $placeholder, 'size' => 50]);
         $mform->setType('defaultvalue', PARAM_RAW);
-        $mform->hideIf('defaultvalue', 'emptybehavior', 'neq', 'default');
+        $mform->hideIf('defaultvalue', 'usefilterdefault', 'notchecked');
         $mform->addHelpButton('defaultvalue', 'emptyfilter_defaultvalue', 'block_configurable_reports');
         $mform->addElement('static', 'defaultvalue_hint', '',
             get_string('emptyfilter_defaultvalue_hint', 'block_configurable_reports'));
-        $mform->hideIf('defaultvalue_hint', 'emptybehavior', 'neq', 'default');
+        $mform->hideIf('defaultvalue_hint', 'usefilterdefault', 'notchecked');
     }
 
     /**
@@ -187,14 +197,69 @@ abstract class plugin_base {
     }
 
     /**
-     * Whether to apply the configured default when the report filter is empty.
+     * Whether the filter default template is enabled in configuration.
+     *
+     * @param object $formdata
+     * @return bool
+     */
+    public function is_filterdefault_enabled(object $formdata): bool {
+        if (!empty($formdata->usefilterdefault)) {
+            return true;
+        }
+        return ($formdata->emptybehavior ?? '') === 'default';
+    }
+
+    /**
+     * Whether a default may be applied for this filter parameter on the report page.
      *
      * @param object $formdata
      * @return bool
      */
     public function should_use_default_when_empty(object $formdata): bool {
-        return $this->get_emptybehavior($formdata) === 'default'
+        return $this->is_filterdefault_enabled($formdata)
             && $this->get_default_filter_value($formdata) !== null;
+    }
+
+    /**
+     * Whether the configured default should be used for this request parameter.
+     *
+     * @param object $formdata
+     * @param string $paramname
+     * @return bool
+     */
+    public function should_apply_default_for_param(object $formdata, string $paramname): bool {
+        return $this->should_use_default_when_empty($formdata)
+            && !param_exists($paramname);
+    }
+
+    /**
+     * Resolve a text report filter parameter, applying the template default when appropriate.
+     *
+     * @param string $paramname
+     * @param object $formdata
+     * @param int $paramtype
+     * @return string
+     */
+    public function resolve_text_filter_param(string $paramname, object $formdata, int $paramtype = PARAM_RAW): string {
+        if ($this->should_apply_default_for_param($formdata, $paramname)) {
+            return $this->get_default_filter_value($formdata) ?? '';
+        }
+        return (string) optional_param($paramname, '', $paramtype);
+    }
+
+    /**
+     * Resolve an encoded (base64) select filter parameter, applying the template default when appropriate.
+     *
+     * @param string $paramname
+     * @param object $formdata
+     * @param int $paramtype
+     * @return string
+     */
+    public function resolve_encoded_filter_param(string $paramname, object $formdata, int $paramtype = PARAM_RAW): string {
+        if ($this->should_apply_default_for_param($formdata, $paramname)) {
+            return $this->get_default_filter_value_encoded($formdata) ?? '';
+        }
+        return (string) optional_param($paramname, '', $paramtype);
     }
 
     /**
@@ -212,14 +277,31 @@ abstract class plugin_base {
     }
 
     /**
+     * Normalize stored filter config for the admin edit form (legacy emptybehavior=default).
+     *
+     * @param object $formdata
+     * @return object
+     */
+    public function prepare_filter_config_formdata(object $formdata): object {
+        if (($formdata->emptybehavior ?? '') === 'default') {
+            $formdata->usefilterdefault = 1;
+            $formdata->emptybehavior = 'omit';
+        }
+        return $formdata;
+    }
+
+    /**
      * Get configured behaviour when filter value is empty on the report form.
      *
      * @param object $formdata
-     * @return string omit|false|default
+     * @return string omit|false
      */
     public function get_emptybehavior(object $formdata): string {
         $behavior = $formdata->emptybehavior ?? 'omit';
-        if (!in_array($behavior, ['omit', 'false', 'default'], true)) {
+        if ($behavior === 'default') {
+            return 'omit';
+        }
+        if (!in_array($behavior, ['omit', 'false'], true)) {
             return 'omit';
         }
         return $behavior;

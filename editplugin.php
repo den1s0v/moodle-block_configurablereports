@@ -149,7 +149,11 @@ if (isset($pluginclass->form) && $pluginclass->form) {
     $editform = new $classname($formurl, compact('comp', 'cid', 'id', 'pluginclass', 'compclass', 'report', 'reportclass'));
 
     if (!empty($cdata)) {
-        $editform->set_data($cdata['formdata']);
+        $formdata = (object) $cdata['formdata'];
+        if ($comp === 'filters') {
+            $formdata = $pluginclass->prepare_filter_config_formdata($formdata);
+        }
+        $editform->set_data($formdata);
     } else {
         $prefill = new stdClass();
         if ($prefillid = optional_param('prefill_idnumber', '', PARAM_TEXT)) {

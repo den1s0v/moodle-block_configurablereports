@@ -65,14 +65,7 @@ class plugin_fcoursefield extends plugin_base {
     public function execute($finalelements, $data) {
         global $remotedb;
         $paramname = 'filter_fcoursefield_' . $data->field;
-        $filterfcoursefield = optional_param($paramname, null, PARAM_RAW);
-        if ($filterfcoursefield === null || $filterfcoursefield === '' || $filterfcoursefield === '0') {
-            if ($this->should_use_default_when_empty($data)) {
-                $filterfcoursefield = $this->get_default_filter_value_encoded($data);
-            } else {
-                $filterfcoursefield = '';
-            }
-        }
+        $filterfcoursefield = $this->resolve_encoded_filter_param($paramname, $data, PARAM_RAW);
         if ($filterfcoursefield) {
             // Function addslashes is done in clean param.
             $filter = clean_param(base64_decode($filterfcoursefield), PARAM_TEXT);
@@ -135,9 +128,11 @@ class plugin_fcoursefield extends plugin_base {
         $filtername = 'filter_fcoursefield_' . $formdata->field;
         $mform->addElement('select', $filtername, get_string($formdata->field), $filteroptions);
         $mform->setType($filtername, PARAM_RAW);
-        $filterfcoursefield = optional_param($filtername, null, PARAM_RAW);
-        if ($filterfcoursefield === null && $formdata && $this->should_use_default_when_empty($formdata)) {
-            $mform->setDefault($filtername, $this->get_default_filter_value_encoded($formdata));
+        $defaultvalue = $formdata
+            ? $this->resolve_encoded_filter_param($filtername, $formdata, PARAM_RAW)
+            : optional_param($filtername, '', PARAM_RAW);
+        if ($defaultvalue !== '') {
+            $mform->setDefault($filtername, $defaultvalue);
         }
     }
 

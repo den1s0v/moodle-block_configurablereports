@@ -70,14 +70,7 @@ class plugin_searchtext extends plugin_base {
         } else {
             $paramname = 'filter_searchtext';
         }
-        $filtersearchtext = optional_param($paramname, null, PARAM_RAW);
-        if ($filtersearchtext === null || $filtersearchtext === '') {
-            if ($this->should_use_default_when_empty($data)) {
-                $filtersearchtext = $this->get_default_filter_value($data);
-            } else {
-                $filtersearchtext = '';
-            }
-        }
+        $filtersearchtext = $this->resolve_text_filter_param($paramname, $data, PARAM_RAW);
 
         if ($this->report->type !== 'sql') {
             return [$filtersearchtext];
@@ -116,13 +109,9 @@ class plugin_searchtext extends plugin_base {
         } else {
             $filterlabel = get_string('filter', 'block_configurable_reports');
         }
-        $filtersearchtext = optional_param($filtername, null, PARAM_RAW);
-        if ($filtersearchtext === null && $formdata && $this->should_use_default_when_empty($formdata)) {
-            $filtersearchtext = $this->get_default_filter_value($formdata);
-        }
-        if ($filtersearchtext === null) {
-            $filtersearchtext = '';
-        }
+        $filtersearchtext = $formdata
+            ? $this->resolve_text_filter_param($filtername, $formdata, PARAM_RAW)
+            : optional_param($filtername, '', PARAM_RAW);
         $mform->addElement('text', $filtername, $filterlabel);
         $mform->setType($filtername, PARAM_RAW);
         $mform->setDefault($filtername, $filtersearchtext);

@@ -79,14 +79,7 @@ class plugin_fuserfield extends plugin_base {
      */
     private function execute_sql($finalelements, $data) {
         $paramname = 'filter_fuserfield_' . $data->field;
-        $filterfuserfield = optional_param($paramname, null, PARAM_BASE64);
-        if ($filterfuserfield === null || $filterfuserfield === '' || $filterfuserfield === '0') {
-            if ($this->should_use_default_when_empty($data)) {
-                $filterfuserfield = $this->get_default_filter_value_encoded($data);
-            } else {
-                $filterfuserfield = '';
-            }
-        }
+        $filterfuserfield = $this->resolve_encoded_filter_param($paramname, $data, PARAM_BASE64);
         $filter = $filterfuserfield ? base64_decode($filterfuserfield) : '';
 
         if ($filterfuserfield) {
@@ -112,14 +105,7 @@ class plugin_fuserfield extends plugin_base {
         global $remotedb;
 
         $paramname = 'filter_fuserfield_' . $data->field;
-        $filterfuserfield = optional_param($paramname, null, PARAM_BASE64);
-        if ($filterfuserfield === null || $filterfuserfield === '' || $filterfuserfield === '0') {
-            if ($this->should_use_default_when_empty($data)) {
-                $filterfuserfield = $this->get_default_filter_value_encoded($data);
-            } else {
-                $filterfuserfield = '';
-            }
-        }
+        $filterfuserfield = $this->resolve_encoded_filter_param($paramname, $data, PARAM_BASE64);
         if ($filterfuserfield) {
             $filter = base64_decode($filterfuserfield);
 
@@ -229,9 +215,11 @@ class plugin_fuserfield extends plugin_base {
         $filtername = 'filter_fuserfield_' . $formdata->field;
         $mform->addElement('select', $filtername, $selectname, $filteroptions);
         $mform->setType($filtername, PARAM_BASE64);
-        $filterfuserfield = optional_param($filtername, null, PARAM_BASE64);
-        if ($filterfuserfield === null && $formdata && $this->should_use_default_when_empty($formdata)) {
-            $mform->setDefault($filtername, $this->get_default_filter_value_encoded($formdata));
+        $defaultvalue = $formdata
+            ? $this->resolve_encoded_filter_param($filtername, $formdata, PARAM_BASE64)
+            : optional_param($filtername, '', PARAM_BASE64);
+        if ($defaultvalue !== '') {
+            $mform->setDefault($filtername, $defaultvalue);
         }
     }
 

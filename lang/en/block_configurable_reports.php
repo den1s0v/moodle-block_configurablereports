@@ -612,27 +612,27 @@ $string['requirefiltersubmit_help'] = 'When enabled, SQL reports with filters do
 $string['requirefiltersubmit_inherit'] = 'Use site default (currently: {$a->current})';
 $string['requirefiltersubmit_yes'] = 'Always require Apply';
 $string['requirefiltersubmit_no'] = 'Never require Apply';
-$string['emptybehavior'] = 'When empty on report page';
-$string['emptybehavior_help'] = 'How to treat this filter when the user has not submitted a value on the report page.
+$string['emptybehavior'] = 'When submitted empty on report page';
+$string['emptybehavior_help'] = 'Applies when the user has submitted the report filter form with this field left empty (after Apply).
 
-* **Omit condition** — remove the SQL filter clause (usual plugin behaviour; may return a very large result set).
-* **Treat as false** — add AND 1=0 so the query returns no rows until the user enters a value.
-* **Use default value** — substitute the value configured below in SQL and pre-fill the report filter field when the user leaves it empty. If the user enters a value, that value is used instead.';
-$string['emptybehavior_intro'] = 'Advanced setting: affects SQL when the filter field on the report page is left empty. See the help icon for details.';
+* **Omit condition** — remove the SQL filter clause (may return a very large result set).
+* **Treat as false** — add AND 1=0 so the query returns no rows.';
 $string['emptybehavior_omit'] = 'Omit condition (match all)';
 $string['emptybehavior_false'] = 'Treat as false (AND 1=0)';
-$string['emptybehavior_default'] = 'Use default value';
+$string['filterdefault_enable'] = 'Use default value';
+$string['filterdefault_enable_help'] = 'Provides a starter value for the report filter: pre-fills the form and applies to SQL on first open, before the user submits the filter form. After Apply with an empty field, the default is not used (see empty-filter behaviour above).';
+$string['filterdefault_intro'] = 'Starter template for the report page: used on first open until the filter is submitted. Not applied after Apply with a cleared field.';
 $string['emptyfilter_defaultvalue'] = 'Default value';
-$string['emptyfilter_defaultvalue_help'] = 'Used only when **Use default value** is selected above.
+$string['emptyfilter_defaultvalue_help'] = 'Used when **Use default value** is enabled above.
 
-Enter the text that should be applied when the report filter is empty (before the user changes it). It is substituted into the report SQL and shown in the filter field on the report page.
+Applied only on first open of the report (the filter parameter is not in the request yet). After the user clicks Apply with an empty field, this value is not substituted.
 
 Typical uses:
 
-1. **Representative example** — a clear sample value (surname, course idnumber, a typical field value) so users see how to fill in the filter.
-2. **Limit the result set** — when an unrestricted query is meaningless or too heavy; the default narrows the data to a sensible subset.
+1. **Representative example** — a clear sample (surname, course idnumber) so users see how to fill in the filter.
+2. **Limit the result set** — when an unrestricted query is too heavy; narrows data on first open.
 
-For dropdown filters (user/course field), enter the plain display value (e.g. a department name); it is encoded the same way as when chosen from the list.';
-$string['emptyfilter_defaultvalue_hint'] = 'Examples: a sample value users can follow, or a limit when matching all rows is not useful.';
+For dropdown filters (user/course field), enter the plain display value; it is encoded like a list selection.';
+$string['emptyfilter_defaultvalue_hint'] = 'Sample for users or a limit on first open — not used after Apply with an empty field.';
 $string['emptyfilter_defaultvalue_placeholder'] = 'e.g. Smith or course idnumber';
 
