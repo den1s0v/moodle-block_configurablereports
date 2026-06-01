@@ -613,8 +613,26 @@ $string['requirefiltersubmit_inherit'] = 'Use site default (currently: {$a->curr
 $string['requirefiltersubmit_yes'] = 'Always require Apply';
 $string['requirefiltersubmit_no'] = 'Never require Apply';
 $string['emptybehavior'] = 'When empty on report page';
-$string['emptybehavior_help'] = 'How to treat this filter when the user has not submitted a value. Omit removes the SQL condition (default plugin behaviour). False adds AND 1=0. Default value (when configured) is reserved for a future release.';
+$string['emptybehavior_help'] = 'How to treat this filter when the user has not submitted a value on the report page.
+
+* **Omit condition** — remove the SQL filter clause (usual plugin behaviour; may return a very large result set).
+* **Treat as false** — add AND 1=0 so the query returns no rows until the user enters a value.
+* **Use default value** — substitute the value configured below in SQL and pre-fill the report filter field when the user leaves it empty. If the user enters a value, that value is used instead.';
+$string['emptybehavior_intro'] = 'Advanced setting: affects SQL when the filter field on the report page is left empty. See the help icon for details.';
 $string['emptybehavior_omit'] = 'Omit condition (match all)';
 $string['emptybehavior_false'] = 'Treat as false (AND 1=0)';
-$string['emptybehavior_default'] = 'Use default value (not yet supported)';
+$string['emptybehavior_default'] = 'Use default value';
+$string['emptyfilter_defaultvalue'] = 'Default value';
+$string['emptyfilter_defaultvalue_help'] = 'Used only when **Use default value** is selected above.
+
+Enter the text that should be applied when the report filter is empty (before the user changes it). It is substituted into the report SQL and shown in the filter field on the report page.
+
+Typical uses:
+
+1. **Representative example** — a clear sample value (surname, course idnumber, a typical field value) so users see how to fill in the filter.
+2. **Limit the result set** — when an unrestricted query is meaningless or too heavy; the default narrows the data to a sensible subset.
+
+For dropdown filters (user/course field), enter the plain display value (e.g. a department name); it is encoded the same way as when chosen from the list.';
+$string['emptyfilter_defaultvalue_hint'] = 'Examples: a sample value users can follow, or a limit when matching all rows is not useful.';
+$string['emptyfilter_defaultvalue_placeholder'] = 'e.g. Smith or course idnumber';
 

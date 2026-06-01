@@ -78,8 +78,16 @@ class plugin_fuserfield extends plugin_base {
      * @return array|mixed|string|string[]
      */
     private function execute_sql($finalelements, $data) {
-        $filterfuserfield = optional_param('filter_fuserfield_' . $data->field, 0, PARAM_BASE64);
-        $filter = base64_decode($filterfuserfield);
+        $paramname = 'filter_fuserfield_' . $data->field;
+        $filterfuserfield = optional_param($paramname, null, PARAM_BASE64);
+        if ($filterfuserfield === null || $filterfuserfield === '' || $filterfuserfield === '0') {
+            if ($this->should_use_default_when_empty($data)) {
+                $filterfuserfield = $this->get_default_filter_value_encoded($data);
+            } else {
+                $filterfuserfield = '';
+            }
+        }
+        $filter = $filterfuserfield ? base64_decode($filterfuserfield) : '';
 
         if ($filterfuserfield) {
             // For backwards compatibility with existing reports.
@@ -103,7 +111,15 @@ class plugin_fuserfield extends plugin_base {
     private function execute_users($finalelements, $data) {
         global $remotedb;
 
-        $filterfuserfield = optional_param('filter_fuserfield_' . $data->field, 0, PARAM_BASE64);
+        $paramname = 'filter_fuserfield_' . $data->field;
+        $filterfuserfield = optional_param($paramname, null, PARAM_BASE64);
+        if ($filterfuserfield === null || $filterfuserfield === '' || $filterfuserfield === '0') {
+            if ($this->should_use_default_when_empty($data)) {
+                $filterfuserfield = $this->get_default_filter_value_encoded($data);
+            } else {
+                $filterfuserfield = '';
+            }
+        }
         if ($filterfuserfield) {
             $filter = base64_decode($filterfuserfield);
 
@@ -210,8 +226,13 @@ class plugin_fuserfield extends plugin_base {
             }
         }
 
-        $mform->addElement('select', 'filter_fuserfield_' . $formdata->field, $selectname, $filteroptions);
-        $mform->setType('filter_fuserfield_' . $formdata->field, PARAM_BASE64);
+        $filtername = 'filter_fuserfield_' . $formdata->field;
+        $mform->addElement('select', $filtername, $selectname, $filteroptions);
+        $mform->setType($filtername, PARAM_BASE64);
+        $filterfuserfield = optional_param($filtername, null, PARAM_BASE64);
+        if ($filterfuserfield === null && $formdata && $this->should_use_default_when_empty($formdata)) {
+            $mform->setDefault($filtername, $this->get_default_filter_value_encoded($formdata));
+        }
     }
 
     /**

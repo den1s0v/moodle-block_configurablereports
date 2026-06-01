@@ -66,16 +66,24 @@ class plugin_searchtext extends plugin_base {
 
         // For backwards compatibility and filters without idnumber, includes old method of matching without idnumber.
         if (!empty($data->idnumber)) {
-            $filtersearchtext = optional_param('filter_searchtext_' . $data->idnumber, '', PARAM_RAW);
+            $paramname = 'filter_searchtext_' . $data->idnumber;
         } else {
-            $filtersearchtext = optional_param('filter_searchtext', '', PARAM_RAW);
+            $paramname = 'filter_searchtext';
+        }
+        $filtersearchtext = optional_param($paramname, null, PARAM_RAW);
+        if ($filtersearchtext === null || $filtersearchtext === '') {
+            if ($this->should_use_default_when_empty($data)) {
+                $filtersearchtext = $this->get_default_filter_value($data);
+            } else {
+                $filtersearchtext = '';
+            }
         }
 
         if ($this->report->type !== 'sql') {
             return [$filtersearchtext];
         }
 
-        if ($filtersearchtext) {
+        if ($filtersearchtext !== '' && $filtersearchtext !== null) {
             if (!empty($data->idnumber)) {
                 $filtermatch = "FILTER_SEARCHTEXT_{$data->idnumber}";
             } else {
@@ -108,7 +116,13 @@ class plugin_searchtext extends plugin_base {
         } else {
             $filterlabel = get_string('filter', 'block_configurable_reports');
         }
-        $filtersearchtext = optional_param($filtername, '', PARAM_RAW);
+        $filtersearchtext = optional_param($filtername, null, PARAM_RAW);
+        if ($filtersearchtext === null && $formdata && $this->should_use_default_when_empty($formdata)) {
+            $filtersearchtext = $this->get_default_filter_value($formdata);
+        }
+        if ($filtersearchtext === null) {
+            $filtersearchtext = '';
+        }
         $mform->addElement('text', $filtername, $filterlabel);
         $mform->setType($filtername, PARAM_RAW);
         $mform->setDefault($filtername, $filtersearchtext);

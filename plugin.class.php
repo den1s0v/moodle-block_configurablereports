@@ -149,6 +149,66 @@ abstract class plugin_base {
         $mform->addElement('select', 'emptybehavior', get_string('emptybehavior', 'block_configurable_reports'), $options);
         $mform->setDefault('emptybehavior', 'omit');
         $mform->addHelpButton('emptybehavior', 'emptybehavior', 'block_configurable_reports');
+        $mform->addElement('static', 'emptybehavior_intro', '',
+            get_string('emptybehavior_intro', 'block_configurable_reports'));
+        $mform->hideIf('emptybehavior_intro', 'emptybehavior', 'neq', 'default');
+    }
+
+    /**
+     * Add default filter value field (shown when emptybehavior is "default").
+     *
+     * @param MoodleQuickForm $mform
+     * @return void
+     */
+    public function add_defaultvalue_field(MoodleQuickForm $mform): void {
+        $placeholder = get_string('emptyfilter_defaultvalue_placeholder', 'block_configurable_reports');
+        $mform->addElement('text', 'defaultvalue', get_string('emptyfilter_defaultvalue', 'block_configurable_reports'),
+            ['placeholder' => $placeholder, 'size' => 50]);
+        $mform->setType('defaultvalue', PARAM_RAW);
+        $mform->hideIf('defaultvalue', 'emptybehavior', 'neq', 'default');
+        $mform->addHelpButton('defaultvalue', 'emptyfilter_defaultvalue', 'block_configurable_reports');
+        $mform->addElement('static', 'defaultvalue_hint', '',
+            get_string('emptyfilter_defaultvalue_hint', 'block_configurable_reports'));
+        $mform->hideIf('defaultvalue_hint', 'emptybehavior', 'neq', 'default');
+    }
+
+    /**
+     * Configured default value for empty report filter, or null if unset.
+     *
+     * @param object $formdata
+     * @return string|null
+     */
+    public function get_default_filter_value(object $formdata): ?string {
+        if (!isset($formdata->defaultvalue)) {
+            return null;
+        }
+        $value = trim((string) $formdata->defaultvalue);
+        return $value === '' ? null : $value;
+    }
+
+    /**
+     * Whether to apply the configured default when the report filter is empty.
+     *
+     * @param object $formdata
+     * @return bool
+     */
+    public function should_use_default_when_empty(object $formdata): bool {
+        return $this->get_emptybehavior($formdata) === 'default'
+            && $this->get_default_filter_value($formdata) !== null;
+    }
+
+    /**
+     * Default value encoded for select-based report filters (base64 option keys).
+     *
+     * @param object $formdata
+     * @return string|null
+     */
+    public function get_default_filter_value_encoded(object $formdata): ?string {
+        $value = $this->get_default_filter_value($formdata);
+        if ($value === null) {
+            return null;
+        }
+        return base64_encode($value);
     }
 
     /**

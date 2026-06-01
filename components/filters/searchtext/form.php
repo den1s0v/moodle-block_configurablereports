@@ -53,6 +53,7 @@ class searchtext_form extends moodleform {
         $mform->addHelpButton('label', 'label', 'block_configurable_reports');
 
         $this->_customdata['pluginclass']->add_emptybehavior_field($mform);
+        $this->_customdata['pluginclass']->add_defaultvalue_field($mform);
 
         // Buttons.
         $this->add_action_buttons(true, get_string('add', 'block_configurable_reports'));
