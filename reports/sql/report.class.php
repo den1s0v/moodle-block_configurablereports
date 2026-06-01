@@ -255,7 +255,7 @@ class report_sql extends report_base {
      *
      * @param string $sql Normalized SQL (prefixes already applied).
      * @return string EXPLAIN statement.
-     * @throws Exception If EXPLAIN is not supported for this database family.
+     * @throws \block_configurable_reports\ExplainUnsupportedException If EXPLAIN is not supported for this database family.
      */
     private function build_explain_sql(string $sql): string {
         global $remotedb;
@@ -268,7 +268,7 @@ class report_sql extends report_base {
             case 'sqlite':
                 return 'EXPLAIN QUERY PLAN ' . $sql;
             default:
-                throw new Exception('EXPLAIN not supported for database family: ' . $remotedb->get_dbfamily());
+                throw new \block_configurable_reports\ExplainUnsupportedException($remotedb->get_dbfamily());
         }
     }
 
