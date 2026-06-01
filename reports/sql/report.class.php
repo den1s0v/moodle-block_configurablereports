@@ -263,7 +263,6 @@ class report_sql extends report_base {
         switch ($remotedb->get_dbfamily()) {
             case 'postgres':
             case 'mysql':
-            case 'mariadb':
                 return 'EXPLAIN ' . $sql;
             case 'sqlite':
                 return 'EXPLAIN QUERY PLAN ' . $sql;
@@ -292,7 +291,7 @@ class report_sql extends report_base {
      * execute_query
      *
      * @param string $sql
-     * @param array|int $options validation options array, or legacy ignored int.
+     * @param array|int $options Options: validation (bool), maxrows (int), prefixes_normalized (bool).
      * @return mixed
      */
     public function execute_query($sql, $options = []) {
@@ -304,7 +303,9 @@ class report_sql extends report_base {
         $validation = !empty($options['validation']);
         $maxrows = $options['maxrows'] ?? null;
 
-        $sql = $this->normalize_sql_prefixes($sql);
+        if (empty($options['prefixes_normalized'])) {
+            $sql = $this->normalize_sql_prefixes($sql);
+        }
 
         $reportlimit = get_config('block_configurable_reports', 'reportlimit');
         if (empty($reportlimit) || $reportlimit == '0') {
@@ -364,7 +365,11 @@ class report_sql extends report_base {
                 }
             }
 
-            $rs = $this->execute_query($sql, ['validation' => true, 'maxrows' => 1]);
+            $rs = $this->execute_query($sql, [
+                'validation' => true,
+                'maxrows' => 1,
+                'prefixes_normalized' => true,
+            ]);
             if ($rs) {
                 $rs->close();
             }
