@@ -621,7 +621,6 @@ $string['emptybehavior_omit'] = 'Omit condition (match all)';
 $string['emptybehavior_false'] = 'Treat as false (AND 1=0)';
 $string['filterdefault_enable'] = 'Use default value';
 $string['filterdefault_enable_help'] = 'Provides a starter value for the report filter: pre-fills the form and applies to SQL on first open, before the user submits the filter form. After Apply with an empty field, the default is not used (see empty-filter behaviour above).';
-$string['filterdefault_intro'] = 'Starter template for the report page: used on first open until the filter is submitted. Not applied after Apply with a cleared field.';
 $string['emptyfilter_defaultvalue'] = 'Default value';
 $string['emptyfilter_defaultvalue_help'] = 'Used when **Use default value** is enabled above.
 

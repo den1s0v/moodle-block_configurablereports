@@ -159,9 +159,6 @@ abstract class plugin_base {
     public function add_usefilterdefault_field(MoodleQuickForm $mform): void {
         $mform->addElement('advcheckbox', 'usefilterdefault', '', get_string('filterdefault_enable', 'block_configurable_reports'));
         $mform->addHelpButton('usefilterdefault', 'filterdefault_enable', 'block_configurable_reports');
-        $mform->addElement('static', 'filterdefault_intro', '',
-            get_string('filterdefault_intro', 'block_configurable_reports'));
-        $mform->hideIf('filterdefault_intro', 'usefilterdefault', 'notchecked');
     }
 
     /**
