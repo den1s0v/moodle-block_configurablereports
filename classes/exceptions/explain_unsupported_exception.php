@@ -22,14 +22,14 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-namespace block_configurable_reports;
+namespace block_configurable_reports\exceptions;
 
 defined('MOODLE_INTERNAL') || die();
 
 /**
  * Thrown when EXPLAIN cannot be built for the active database driver family.
  */
-class ExplainUnsupportedException extends \Exception {
+class explain_unsupported_exception extends \Exception {
 
     /**
      * @param string $dbfamily Value from {@see \moodle_database::get_dbfamily()}.

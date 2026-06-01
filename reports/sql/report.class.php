@@ -255,7 +255,7 @@ class report_sql extends report_base {
      *
      * @param string $sql Normalized SQL (prefixes already applied).
      * @return string EXPLAIN statement.
-     * @throws \block_configurable_reports\ExplainUnsupportedException If EXPLAIN is not supported for this database family.
+     * @throws \block_configurable_reports\exceptions\explain_unsupported_exception If EXPLAIN is not supported for this database family.
      */
     private function build_explain_sql(string $sql): string {
         global $remotedb;
@@ -268,7 +268,7 @@ class report_sql extends report_base {
             case 'sqlite':
                 return 'EXPLAIN QUERY PLAN ' . $sql;
             default:
-                throw new \block_configurable_reports\ExplainUnsupportedException($remotedb->get_dbfamily());
+                throw new \block_configurable_reports\exceptions\explain_unsupported_exception($remotedb->get_dbfamily());
         }
     }
 
@@ -277,6 +277,7 @@ class report_sql extends report_base {
      *
      * @param string $sql Normalized SQL (prefixes already applied).
      * @return void
+     * @throws \block_configurable_reports\exceptions\explain_unsupported_exception
      * @throws dml_exception
      */
     private function explain_query_sql(string $sql): void {
@@ -352,8 +353,14 @@ class report_sql extends report_base {
                 try {
                     $this->explain_query_sql($sql);
                     return null;
+                } catch (\block_configurable_reports\exceptions\explain_unsupported_exception $e) {
+                    // Unsupported DB family — fall back to execute with maxrows 1.
+                } catch (dml_exception $e) {
+                    // EXPLAIN failed at runtime — fall back to execute with maxrows 1.
                 } catch (Throwable $e) {
-                    // EXPLAIN failed or unsupported — fall back to execute with maxrows 1.
+                    if (defined('DEBUG_DEVELOPER') && DEBUG_DEVELOPER) {
+                        throw $e;
+                    }
                 }
             }
 
