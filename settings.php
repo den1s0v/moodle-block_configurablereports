@@ -115,6 +115,15 @@ if ($ADMIN->fulltree) {
     );
 
     $settings->add(
+        new admin_setting_configcheckbox(
+            'block_configurable_reports/validate_sql_with_explain',
+            get_string('validate_sql_with_explain', 'block_configurable_reports'),
+            get_string('validate_sql_with_explain_help', 'block_configurable_reports'),
+            0
+        )
+    );
+
+    $settings->add(
         new admin_setting_configtext(
             'block_configurable_reports/reportlimit', get_string('reportlimit', 'block_configurable_reports'),
             get_string('reportlimitinfo', 'block_configurable_reports'), '5000', PARAM_INT, 6

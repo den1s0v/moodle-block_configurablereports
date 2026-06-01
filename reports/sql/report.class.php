@@ -239,6 +239,55 @@ class report_sql extends report_base {
     }
 
     /**
+     * Replace prefix_ table placeholders with the site table prefix.
+     *
+     * @param string $sql
+     * @return string
+     */
+    private function normalize_sql_prefixes(string $sql): string {
+        global $CFG;
+
+        return preg_replace('/\bprefix_(?=\w+)/i', $CFG->prefix, $sql);
+    }
+
+    /**
+     * Build an EXPLAIN statement for the given SQL (db family dependent).
+     *
+     * @param string $sql Normalized SQL (prefixes already applied).
+     * @return string EXPLAIN statement.
+     * @throws Exception If EXPLAIN is not supported for this database family.
+     */
+    private function build_explain_sql(string $sql): string {
+        global $remotedb;
+
+        switch ($remotedb->get_dbfamily()) {
+            case 'postgres':
+            case 'mysql':
+            case 'mariadb':
+                return 'EXPLAIN ' . $sql;
+            case 'sqlite':
+                return 'EXPLAIN QUERY PLAN ' . $sql;
+            default:
+                throw new Exception('EXPLAIN not supported for database family: ' . $remotedb->get_dbfamily());
+        }
+    }
+
+    /**
+     * Run EXPLAIN on SQL to validate parse/plan without fetching rows.
+     *
+     * @param string $sql Normalized SQL (prefixes already applied).
+     * @return void
+     * @throws dml_exception
+     */
+    private function explain_query_sql(string $sql): void {
+        global $remotedb;
+
+        $explainsql = $this->build_explain_sql($sql);
+        $rs = $remotedb->get_recordset_sql($explainsql);
+        $rs->close();
+    }
+
+    /**
      * execute_query
      *
      * @param string $sql
@@ -254,7 +303,7 @@ class report_sql extends report_base {
         $validation = !empty($options['validation']);
         $maxrows = $options['maxrows'] ?? null;
 
-        $sql = preg_replace('/\bprefix_(?=\w+)/i', $CFG->prefix, $sql);
+        $sql = $this->normalize_sql_prefixes($sql);
 
         $reportlimit = get_config('block_configurable_reports', 'reportlimit');
         if (empty($reportlimit) || $reportlimit == '0') {
@@ -297,6 +346,17 @@ class report_sql extends report_base {
 
         try {
             $sql = $this->build_sql_from_config($rawsql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE);
+            $sql = $this->normalize_sql_prefixes($sql);
+
+            if (get_config('block_configurable_reports', 'validate_sql_with_explain')) {
+                try {
+                    $this->explain_query_sql($sql);
+                    return null;
+                } catch (Throwable $e) {
+                    // EXPLAIN failed or unsupported — fall back to execute with maxrows 1.
+                }
+            }
+
             $rs = $this->execute_query($sql, ['validation' => true, 'maxrows' => 1]);
             if ($rs) {
                 $rs->close();

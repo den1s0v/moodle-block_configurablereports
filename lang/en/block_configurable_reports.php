@@ -614,6 +614,8 @@ $string['requirefiltersubmit_help'] = 'When enabled, SQL reports with filters do
 $string['requirefiltersubmit_inherit'] = 'Use site default (currently: {$a->current})';
 $string['requirefiltersubmit_yes'] = 'Always require Apply';
 $string['requirefiltersubmit_no'] = 'Never require Apply';
+$string['validate_sql_with_explain'] = 'Validate custom SQL with EXPLAIN';
+$string['validate_sql_with_explain_help'] = 'When enabled, saving a SQL report runs EXPLAIN on the restrictive query instead of fetching rows. If EXPLAIN fails, validation falls back to running the query with a limit of 1 row. Does not catch all runtime errors (e.g. permissions, division by zero).';
 $string['emptybehavior'] = 'When submitted empty on report page';
 $string['emptybehavior_help'] = 'Applies when the user has submitted the report filter form with this field left empty (after Apply).
 

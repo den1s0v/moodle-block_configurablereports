@@ -53,6 +53,8 @@ $string['requirefiltersubmit_help'] = 'Если включено, SQL-отчёт
 $string['requirefiltersubmit_inherit'] = 'Как на сайте (сейчас: {$a->current})';
 $string['requirefiltersubmit_yes'] = 'Всегда требовать нажатия «Применить»';
 $string['requirefiltersubmit_no'] = 'Не требовать нажатия «Применить»';
+$string['validate_sql_with_explain'] = 'Проверять пользовательский SQL через EXPLAIN';
+$string['validate_sql_with_explain_help'] = 'При включении при сохранении SQL-отчёта выполняется EXPLAIN restrictive-запроса вместо выборки строк. Если EXPLAIN не удаётся, проверка откатывается к выполнению запроса с лимитом 1 строка. Не выявляет все ошибки времени выполнения (права, деление на ноль и т.п.).';
 $string['emptybehavior'] = 'Если отправлен пустым на странице отчёта';
 $string['emptybehavior_help'] = 'Действует, когда пользователь отправил форму фильтров с пустым полем (после «Применить»).
 
