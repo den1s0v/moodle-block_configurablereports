@@ -73,6 +73,7 @@ class report_sql extends report_base {
             'customsql',
             'filters',
             'template',
+            'chains',
             'permissions',
             'calcs',
             'plot',

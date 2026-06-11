@@ -35,6 +35,30 @@ defined('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_SKIP') || define('BLOCK_CONFIGUR
 defined('BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT') || define('BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT', -1);
 
 /**
+ * Resolve a report filter request parameter, honouring programmatic injection.
+ *
+ * @param int $reportid
+ * @param string $paramname
+ * @param mixed $default
+ * @param string|int $paramtype PARAM_* constant
+ * @return mixed
+ */
+function cr_get_filter_param(int $reportid, string $paramname, $default, $paramtype) {
+    $injectionfile = __DIR__ . '/classes/chain/filter_injection.php';
+    if (file_exists($injectionfile)) {
+        require_once($injectionfile);
+        if (\block_configurable_reports\chain\filter_injection::has($reportid, $paramname)) {
+            $value = \block_configurable_reports\chain\filter_injection::get($reportid, $paramname);
+            if (is_array($value)) {
+                return clean_param_array($value, $paramtype);
+            }
+            return clean_param($value, $paramtype);
+        }
+    }
+    return optional_param($paramname, $default, $paramtype);
+}
+
+/**
  * cr_print_js_function
  *
  * @return void

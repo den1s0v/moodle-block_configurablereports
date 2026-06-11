@@ -63,7 +63,7 @@ class plugin_users extends plugin_base {
      */
     public function execute($finalelements) {
 
-        $filterusers = optional_param('filter_users', 0, PARAM_INT);
+        $filterusers = cr_get_filter_param((int) $this->report->id, 'filter_users', 0, PARAM_INT);
         if (!$filterusers) {
             return $finalelements;
         }

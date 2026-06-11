@@ -322,6 +322,9 @@ abstract class plugin_base {
      * @return string
      */
     public function resolve_text_filter_param(string $paramname, object $formdata, $paramtype = PARAM_RAW): string {
+        if ($this->report && \block_configurable_reports\chain\filter_injection::has((int) $this->report->id, $paramname)) {
+            return (string) cr_get_filter_param((int) $this->report->id, $paramname, '', $paramtype);
+        }
         if ($this->should_apply_default_for_param($formdata, $paramname)) {
             return $this->get_default_filter_value($formdata) ?? '';
         }
@@ -337,6 +340,9 @@ abstract class plugin_base {
      * @return string
      */
     public function resolve_encoded_filter_param(string $paramname, object $formdata, $paramtype = PARAM_RAW): string {
+        if ($this->report && \block_configurable_reports\chain\filter_injection::has((int) $this->report->id, $paramname)) {
+            return (string) cr_get_filter_param((int) $this->report->id, $paramname, '', $paramtype);
+        }
         if ($this->should_apply_default_for_param($formdata, $paramname)) {
             return $this->get_default_filter_value_encoded($formdata) ?? '';
         }

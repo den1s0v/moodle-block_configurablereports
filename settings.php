@@ -130,6 +130,17 @@ if ($ADMIN->fulltree) {
         )
     );
 
+    $settings->add(
+        new admin_setting_configtext(
+            'block_configurable_reports/chainmaxrows',
+            get_string('chainmaxrows', 'block_configurable_reports'),
+            get_string('chainmaxrowsinfo', 'block_configurable_reports'),
+            '100',
+            PARAM_INT,
+            6
+        )
+    );
+
 
     $settings->add(new admin_setting_configtext('block_configurable_reports/allowedsqlusers', get_string('allowedsqlusers', 'block_configurable_reports'),
         get_string('allowedsqlusersinfo', 'block_configurable_reports'), '', PARAM_TEXT));

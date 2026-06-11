@@ -1045,7 +1045,7 @@ abstract class report_base {
 
         if ($template) {
             $this->print_template($template, $moodlepage);
-
+            $this->print_chain_export_link();
             return true;
         }
 
@@ -1145,6 +1145,58 @@ abstract class report_base {
             echo "&nbsp;<a href=\"javascript: printDiv('printablediv')\">".get_string('printreport', 'block_configurable_reports')."</a>";
             echo "</div>\n";
         }
+
+        $this->print_chain_export_link();
+    }
+
+    /**
+     * Inject filter parameters for programmatic child report execution.
+     *
+     * @param array<string, mixed> $params
+     * @return void
+     */
+    public function set_injected_filter_params(array $params): void {
+        \block_configurable_reports\chain\filter_injection::set((int) $this->config->id, $params);
+    }
+
+    /**
+     * Clear injected filter parameters for this report.
+     *
+     * @return void
+     */
+    public function clear_injected_filter_params(): void {
+        \block_configurable_reports\chain\filter_injection::clear((int) $this->config->id);
+    }
+
+    /**
+     * Print link to chain export page when chains are configured.
+     *
+     * @return void
+     */
+    public function print_chain_export_link(): void {
+        if ($this->executiondeferred) {
+            return;
+        }
+        if (!class_exists('\block_configurable_reports\chain\definition')) {
+            return;
+        }
+        if (!\block_configurable_reports\chain\definition::report_has_active_chains($this->config)) {
+            return;
+        }
+
+        $params = ['id' => $this->config->id, 'courseid' => $this->config->courseid];
+        $request = array_merge($_POST, $_GET);
+        foreach ($request as $key => $val) {
+            if (strpos($key, 'filter_') === 0) {
+                $params[$key] = $val;
+            }
+        }
+
+        $url = new moodle_url('/blocks/configurable_reports/chainexport.php', $params);
+        echo html_writer::div(
+            html_writer::link($url, get_string('chainexportlink', 'block_configurable_reports'), ['class' => 'btn btn-secondary']),
+            'centerpara chainexportlink'
+        );
     }
 
     /**

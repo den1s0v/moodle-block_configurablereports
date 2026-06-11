@@ -65,7 +65,7 @@ class plugin_coursecategories extends plugin_base {
         global $remotedb, $CFG;
         require_once($CFG->dirroot . "/course/lib.php");
 
-        $category = optional_param('filter_coursecategories', 0, PARAM_INT);
+        $category = cr_get_filter_param((int) $this->report->id, 'filter_coursecategories', 0, PARAM_INT);
         if (!$category) {
             return $finalelements;
         }
@@ -100,7 +100,7 @@ class plugin_coursecategories extends plugin_base {
         global $CFG;
         require_once($CFG->dirroot . "/course/lib.php");
 
-        $filtercategories = optional_param('filter_coursecategories', 0, PARAM_INT);
+        $filtercategories = cr_get_filter_param((int) $this->report->id, 'filter_coursecategories', 0, PARAM_INT);
 
         $displaylist = [];
         $notused = [];

@@ -43,6 +43,7 @@ class report_users extends report_base {
             'ordering',
             'filters',
             'template',
+            'chains',
             'permissions',
             'calcs',
             'plot',

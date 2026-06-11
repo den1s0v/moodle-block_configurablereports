@@ -62,7 +62,7 @@ class plugin_subcategories extends plugin_base {
      * @return array|string|string[]
      */
     public function execute($finalelements) {
-        $filtersubcategories = optional_param('filter_subcategories', 0, PARAM_INT);
+        $filtersubcategories = cr_get_filter_param((int) $this->report->id, 'filter_subcategories', 0, PARAM_INT);
         if (!$filtersubcategories) {
             return $finalelements;
         }
@@ -91,7 +91,7 @@ class plugin_subcategories extends plugin_base {
 
         global $remotedb, $CFG;
 
-        $filtersubcategories = optional_param('filter_subcategories', 0, PARAM_INT);
+        $filtersubcategories = cr_get_filter_param((int) $this->report->id, 'filter_subcategories', 0, PARAM_INT);
 
         $reportclassname = 'report_' . $this->report->type;
         $reportclass = new $reportclassname($this->report);

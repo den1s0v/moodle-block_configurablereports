@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Configurable Reports a Moodle block for creating customizable reports
- *
- * @copyright  2020 Juan Leyva <juan@moodle.com>
- * @package    block_configurable_reports
- * @author     Juan leyva <http://www.twitter.com/jleyvadelgado>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+use block_configurable_reports\export\report_matrix;
 
 /**
  * export_report
@@ -30,35 +23,42 @@
  * @return void
  */
 function export_report($report) {
+    export_report_to_path($report, null);
+    exit;
+}
+
+/**
+ * Export report to a file path or browser.
+ *
+ * @param object $report
+ * @param string|null $filepath
+ * @return void
+ */
+function export_report_to_path($report, ?string $filepath): void {
     global $CFG;
     require_once($CFG->libdir . '/csvlib.class.php');
 
-    $table = $report->table;
-
-    $matrix = [];
+    $matrix = report_matrix::from_finalreport($report);
     $filename = format_string($report->name) ?? 'report';
-
-    if (!empty($table->head)) {
-        foreach ($table->head as $key => $heading) {
-            $matrix[0][$key] = str_replace("\n", ' ', htmlspecialchars_decode(strip_tags(nl2br(format_string($heading)))));
-        }
-    }
-
-    if (!empty($table->data)) {
-        foreach ($table->data as $rkey => $row) {
-            foreach ($row as $key => $item) {
-                $matrix[$rkey + 1][$key] = str_replace("\n", ' ', htmlspecialchars_decode(strip_tags(nl2br(format_string($item)))));
-            }
-        }
-    }
-
     $csvdelimiter = get_config('block_configurable_reports', 'csvdelimiter');
     $csvexport = new csv_export_writer("$csvdelimiter", '"', 'application/download', true);
     $csvexport->set_filename($filename);
+    $delimiter = $csvexport->delimiter ?? ',';
 
-    foreach ($matrix as $ri => $col) {
-        $csvexport->add_data($col);
+    if ($filepath !== null) {
+        $handle = fopen($filepath, 'w');
+        if ($handle === false) {
+            throw new moodle_exception('chainerror_exportformat', 'block_configurable_reports');
+        }
+        foreach ($matrix as $row) {
+            fputcsv($handle, $row, $delimiter, '"');
+        }
+        fclose($handle);
+        return;
+    }
+
+    foreach ($matrix as $row) {
+        $csvexport->add_data($row);
     }
     $csvexport->download_file();
-    exit;
 }

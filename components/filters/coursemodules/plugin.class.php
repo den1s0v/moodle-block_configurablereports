@@ -64,7 +64,7 @@ class plugin_coursemodules extends plugin_base {
     public function execute($finalelements) {
         global $remotedb;
 
-        $filtercoursemoduleid = optional_param('filter_coursemodules', 0, PARAM_INT);
+        $filtercoursemoduleid = cr_get_filter_param((int) $this->report->id, 'filter_coursemodules', 0, PARAM_INT);
         if (!$filtercoursemoduleid) {
             return $finalelements;
         }

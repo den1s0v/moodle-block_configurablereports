@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Configurable Reports a Moodle block for creating customizable reports
- *
- * @copyright  2020 Juan Leyva <juan@moodle.com>
- * @author     Juan leyva <http://www.twitter.com/jleyvadelgado>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @package    block_configurable_reports
- */
+use block_configurable_reports\export\report_matrix;
 
 /**
  * Export report
@@ -30,23 +23,39 @@
  * @return void
  */
 function export_report($report) {
-    $table = $report->table;
+    export_report_to_path($report, null);
+    exit;
+}
 
-    $reportname = format_string($report->name) ?? 'report';
-    $filename = $reportname . '_' . (time()) . '.json';
+/**
+ * Export report to a file path or browser.
+ *
+ * @param object $report
+ * @param string|null $filepath
+ * @return void
+ */
+function export_report_to_path($report, ?string $filepath): void {
+    $table = $report->table;
     $json = [];
-    $headers = $table->head;
-    foreach ($table->data as $data) {
+    $headers = $table->head ?? [];
+    foreach ($table->data ?? [] as $data) {
         $jsonobject = [];
         foreach ($data as $index => $value) {
-            $jsonobject[$headers[$index]] = format_string($value);
+            $jsonobject[$headers[$index] ?? $index] = format_string($value);
         }
         $json[] = $jsonobject;
     }
 
-    $downloadfilename = clean_filename($filename);
+    $content = json_encode($json);
+    $reportname = format_string($report->name) ?? 'report';
+    $downloadfilename = clean_filename($reportname . '_' . time() . '.json');
+
+    if ($filepath !== null) {
+        file_put_contents($filepath, $content);
+        return;
+    }
+
     header('Content-disposition: attachment; filename=' . $downloadfilename);
     header('Content-type: application/json');
-    echo json_encode($json);
-    exit;
+    echo $content;
 }

@@ -63,7 +63,7 @@ class plugin_semester extends plugin_base {
      */
     public function execute($finalelements) {
 
-        $filtersemester = optional_param('filter_semester', '', PARAM_RAW);
+        $filtersemester = cr_get_filter_param((int) $this->report->id, 'filter_semester', '', PARAM_RAW);
         if (!$filtersemester) {
             return $finalelements;
         }
@@ -90,7 +90,7 @@ class plugin_semester extends plugin_base {
      */
     public function print_filter(MoodleQuickForm $mform, $formdata = false): void {
 
-        $filtersemester = optional_param('filter_semester', '', PARAM_RAW);
+        $filtersemester = cr_get_filter_param((int) $this->report->id, 'filter_semester', '', PARAM_RAW);
 
         $reportclassname = 'report_' . $this->report->type;
         $reportclass = new $reportclassname($this->report);

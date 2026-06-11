@@ -14,14 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Configurable Reports a Moodle block for creating customizable reports
- *
- * @copyright  2020 Juan Leyva <juan@moodle.com>
- * @package    block_configurable_reports
- * @author     Juan leyva <http://www.twitter.com/jleyvadelgado>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
+use block_configurable_reports\export\report_matrix;
 
 /**
  * Export report
@@ -30,35 +23,35 @@
  * @return void
  */
 function export_report($report) {
+    $reportname = format_string($report->name) ?? 'report';
+    $filename = $reportname . time() . '.ods';
+    export_report_to_path($report, null, clean_filename($filename));
+    exit;
+}
+
+/**
+ * Export report to a file path or browser.
+ *
+ * @param object $report
+ * @param string|null $filepath
+ * @param string|null $downloadfilename
+ * @return void
+ */
+function export_report_to_path($report, ?string $filepath, ?string $downloadfilename = null): void {
     global $CFG;
     require_once($CFG->dirroot . '/lib/odslib.class.php');
 
-    $table = $report->table;
-    $matrix = [];
-    $reportname = format_string($report->name) ?? 'report';
-    $filename = $reportname . (time()) . '.ods';
+    $matrix = report_matrix::from_finalreport($report);
+    $target = $filepath ?? '-';
+    $downloadfilename = $downloadfilename ?? ((format_string($report->name) ?? 'report') . time() . '.ods');
 
-    if (!empty($table->head)) {
-        foreach ($table->head as $key => $heading) {
-            $matrix[0][$key] = str_replace("\n", ' ', htmlspecialchars_decode(strip_tags(nl2br(format_string($heading)))));
-        }
+    $workbook = new MoodleODSWorkbook($target);
+    if ($filepath === null) {
+        $workbook->send($downloadfilename);
     }
 
-    if (!empty($table->data)) {
-        foreach ($table->data as $rkey => $row) {
-            foreach ($row as $key => $item) {
-                $matrix[$rkey + 1][$key] = str_replace("\n", ' ', htmlspecialchars_decode(strip_tags(nl2br(format_string($item)))));
-            }
-        }
-    }
-
-    $downloadfilename = clean_filename($filename);
-    // Creating a workbook.
-    $workbook = new MoodleODSWorkbook("-");
-    // Sending HTTP headers.
-    $workbook->send($downloadfilename);
-    // Adding the worksheet.
-    $myxls = $workbook->add_worksheet($filename);
+    $sheetname = format_string($report->name) ?? 'report';
+    $myxls = $workbook->add_worksheet($sheetname);
 
     foreach ($matrix as $ri => $col) {
         foreach ($col as $ci => $cv) {
@@ -67,5 +60,4 @@ function export_report($report) {
     }
 
     $workbook->close();
-    exit;
 }

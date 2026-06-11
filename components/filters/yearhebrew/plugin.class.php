@@ -63,7 +63,7 @@ class plugin_yearhebrew extends plugin_base {
      */
     public function execute($finalelements) {
 
-        $filteryearhebrew = optional_param('filter_yearhebrew', '', PARAM_RAW);
+        $filteryearhebrew = cr_get_filter_param((int) $this->report->id, 'filter_yearhebrew', '', PARAM_RAW);
         if (!$filteryearhebrew) {
             return $finalelements;
         }

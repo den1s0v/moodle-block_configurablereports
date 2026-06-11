@@ -63,7 +63,7 @@ class plugin_role extends plugin_base {
      */
     public function execute($finalelements) {
 
-        $filterrole = optional_param('filter_role', 0, PARAM_INT);
+        $filterrole = cr_get_filter_param((int) $this->report->id, 'filter_role', 0, PARAM_INT);
         if (!$filterrole) {
             return $finalelements;
         }

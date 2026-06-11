@@ -49,6 +49,7 @@ class report_timeline extends report_base {
             'columns',
             'filters',
             'template',
+            'chains',
             'permissions',
             'calcs',
             'plot',

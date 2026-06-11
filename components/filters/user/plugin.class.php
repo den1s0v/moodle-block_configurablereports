@@ -62,7 +62,7 @@ class plugin_user extends plugin_base {
      * @return array|string|string[]
      */
     public function execute($finalelements) {
-        $filteruser = optional_param('filter_user', 0, PARAM_INT);
+        $filteruser = cr_get_filter_param((int) $this->report->id, 'filter_user', 0, PARAM_INT);
         if (!$filteruser) {
             return $finalelements;
         }

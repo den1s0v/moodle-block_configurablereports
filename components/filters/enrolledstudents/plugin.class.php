@@ -62,7 +62,7 @@ class plugin_enrolledstudents extends plugin_base {
      * @return array|string|string[]
      */
     public function execute($finalelements) {
-        $filterenrolledstudents = optional_param('filter_enrolledstudents', 0, PARAM_INT);
+        $filterenrolledstudents = cr_get_filter_param((int) $this->report->id, 'filter_enrolledstudents', 0, PARAM_INT);
         if (!$filterenrolledstudents) {
             return $finalelements;
         }

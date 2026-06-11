@@ -14,92 +14,92 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+use block_configurable_reports\export\report_matrix;
+
 /**
- * Configurable Reports
- * A Moodle block for creating customizable reports
- * @package blocks
- * @author: Juan leyva <http://www.twitter.com/jleyvadelgado>
- * @date: 2009
+ * Export report
+ *
+ * @param object $report
+ * @return void
  */
-
-function export_report($report)
-{
-    $filename = $report->name ?? 'report';
-    $table = $report->table;
-
-    set_header($filename);
-
-    echo "ID;P\n";
-
-    if (!empty($table->head)) {
-        $head = [];
-
-        foreach ($table->head as $title) {
-            $head[] = $title;
-        }
-
-        dump_slk_row($head);
-    }
-
-    foreach ($table->data as $row) {
-        dump_slk_row($row);
-    }
-
-    echo "E\n";
-
+function export_report($report) {
+    export_report_to_path($report, null);
     exit;
 }
 
-function set_header($filename)
-{
+/**
+ * Export report to a file path or browser.
+ *
+ * @param object $report
+ * @param string|null $filepath
+ * @return void
+ */
+function export_report_to_path($report, ?string $filepath): void {
     global $CFG;
+    require_once($CFG->libdir . '/moodlelib.php');
 
-    require_once("$CFG->libdir/moodlelib.php");
+    $content = slk_build_content($report);
+    $filename = clean_filename(($report->name ?? 'report') . '-' . gmdate('Ymd_Hi') . '.slk');
 
-    $gmdate = gmdate("Ymd_Hi");
-    $filename = clean_filename("$filename-$gmdate.slk");
+    if ($filepath !== null) {
+        file_put_contents($filepath, $content);
+        return;
+    }
 
-    if (strpos($CFG->wwwroot, 'https://') === 0) { // HTTPS sites - watch out for IE! KB812935 and KB316431.
+    if (strpos($CFG->wwwroot, 'https://') === 0) {
         header('Cache-Control: max-age=10');
         header('Pragma: ');
-    } else { //normal http - prevent caching at all cost
+    } else {
         header('Cache-Control: private, must-revalidate, pre-check=0, post-check=0, max-age=0');
         header('Pragma: no-cache');
     }
     header('Expires: ' . gmdate('D, d M Y H:i:s', 0) . ' GMT');
-    header("Content-Type: application/download; charset=iso-8859-1");
-    header("Content-Disposition: attachment; filename=\"$filename\"");
+    header('Content-Type: application/download; charset=iso-8859-1');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    echo $content;
 }
 
-$row = 1;
+/**
+ * Build SLK content for a report.
+ *
+ * @param object $report
+ * @return string
+ */
+function slk_build_content($report): string {
+    $table = $report->table;
+    $lines = ["ID;P\n"];
+    $rownum = 1;
 
-function dump_slk_row($data)
-{
-    // Refer to https://en.wikipedia.org/wiki/Symbolic_Link_(SYLK)
-
-    global $row;
-    $col = 1;
-
-    foreach ($data as $datum) {
-        $datum =
-            htmlspecialchars_decode(
-                strip_tags(
-                    nl2br(
-                        str_replace('"', "'", $datum)
-                    )
-                )
-            );
-
-        if (preg_match('!!u', $datum)) {
-            // https://stackoverflow.com/questions/4407854/how-do-i-detect-if-have-to-apply-utf-8-decode-or-encode-on-a-string
-
-            $datum = iconv("UTF-8", "ISO-8859-1//TRANSLIT", $datum);
-        }
-
-        echo "C;Y$row;X$col;K\"$datum\"\n";
-
-        ++$col;
+    if (!empty($table->head)) {
+        $lines[] = slk_format_row($table->head, $rownum++);
     }
 
-    ++$row;
+    foreach ($table->data ?? [] as $row) {
+        $lines[] = slk_format_row($row, $rownum++);
+    }
+
+    $lines[] = "E\n";
+    return implode('', $lines);
+}
+
+/**
+ * Format one SLK row.
+ *
+ * @param array $data
+ * @param int $row
+ * @return string
+ */
+function slk_format_row(array $data, int $row): string {
+    $col = 1;
+    $output = '';
+    foreach ($data as $datum) {
+        $datum = report_matrix::cell_to_plain_text($datum);
+        $datum = str_replace('"', "'", $datum);
+        if (preg_match('!!u', $datum)) {
+            $datum = iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $datum);
+        }
+        $output .= "C;Y{$row};X{$col};K\"{$datum}\"\n";
+        $col++;
+    }
+    return $output;
 }

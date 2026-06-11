@@ -63,7 +63,7 @@ class plugin_categories extends plugin_base {
      */
     public function execute($finalelements) {
 
-        $filtercategories = optional_param('filter_categories', 0, PARAM_INT);
+        $filtercategories = cr_get_filter_param((int) $this->report->id, 'filter_categories', 0, PARAM_INT);
         if (!$filtercategories) {
             return $finalelements;
         }
