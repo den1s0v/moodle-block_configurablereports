@@ -84,6 +84,20 @@ function block_configurable_reports_render_chainexport_summary($output, export_r
 }
 
 /**
+ * Render a back link with a left arrow at the top of the page.
+ *
+ * @param renderer_base $output
+ * @param moodle_url $url
+ * @return void
+ */
+function block_configurable_reports_chainexport_render_back_link($output, moodle_url $url): void {
+    echo html_writer::div(
+        html_writer::link($url, $output->larrow() . ' ' . get_string('back'), ['class' => 'chainexport-backlink']),
+        'mb-3'
+    );
+}
+
+/**
  * Print standard report management tabs when the user can manage the report.
  *
  * @param object $report
@@ -229,6 +243,11 @@ if ($chainid) {
         'id' => (int) definition::normalise_formdata((object) $chainelement['formdata'])->childreportid,
     ], '*', MUST_EXIST);
     $formats = definition::get_allowed_export_formats($childreport);
+    $chaincontextlabel = definition::get_chain_list_label($chainelement, $childreport);
+    $pageheading = get_string('chainexportheadingcontext', 'block_configurable_reports', (object) [
+        'parent' => $reportname,
+        'chain' => $chaincontextlabel,
+    ]);
 
     $runnerinstance = new runner($report, $chainelement, $context, (int) $USER->id);
     $rows = $runnerinstance->get_parent_row_descriptors();
@@ -353,7 +372,8 @@ EOT
 
     echo $OUTPUT->header();
     block_configurable_reports_chainexport_print_tabs($report, $reportclass, $context);
-    echo $OUTPUT->heading($pagetitle);
+    block_configurable_reports_chainexport_render_back_link($OUTPUT, $chainlisturl);
+    echo $OUTPUT->heading($pageheading);
 
     if ($exportdone) {
         $summaryresult = new export_result();
@@ -412,6 +432,7 @@ EOT
 
 echo $OUTPUT->header();
 block_configurable_reports_chainexport_print_tabs($report, $reportclass, $context);
+block_configurable_reports_chainexport_render_back_link($OUTPUT, $viewreporturl);
 echo $OUTPUT->heading($pagetitle);
 echo html_writer::tag('p', get_string('chainexportchoose', 'block_configurable_reports'));
 

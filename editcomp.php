@@ -147,6 +147,18 @@ echo $OUTPUT->header();
 $currenttab = $comp;
 require('tabs.php');
 
+if ($comp === 'chains') {
+    $viewreporturl = new moodle_url('/blocks/configurable_reports/viewreport.php', [
+        'id' => $id,
+        'courseid' => $courseid,
+    ]);
+    $chainshelp = get_string('chains_usage_help', 'block_configurable_reports', (object) [
+        'viewreportlink' => html_writer::link($viewreporturl, get_string('viewreport', 'block_configurable_reports')),
+        'exportlink' => get_string('chainexportlink', 'block_configurable_reports'),
+    ]);
+    echo $OUTPUT->box($chainshelp, 'generalbox boxwidthnormal boxaligncenter chains-usage-help mb-3');
+}
+
 $filteranalysis = null;
 if ($comp === 'filters' && $report->type === 'sql') {
     require_once($CFG->dirroot . '/blocks/configurable_reports/classes/filter_sql_analyzer.php');
