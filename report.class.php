@@ -1192,6 +1192,11 @@ abstract class report_base {
             }
         }
 
+        $activechains = \block_configurable_reports\chain\definition::get_active_chain_elements($this->config);
+        if (count($activechains) === 1) {
+            $params['chainid'] = $activechains[0]['id'];
+        }
+
         $url = new moodle_url('/blocks/configurable_reports/chainexport.php', $params);
         echo html_writer::div(
             html_writer::link($url, get_string('chainexportlink', 'block_configurable_reports'), ['class' => 'btn btn-secondary']),

@@ -198,6 +198,16 @@ if (empty($activechains)) {
     throw new moodle_exception('chainerror_nochains', 'block_configurable_reports');
 }
 
+$singlechainmode = (count($activechains) === 1);
+if ($chainid === '' && $singlechainmode) {
+    redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+        'id' => $id,
+        'chainid' => $activechains[0]['id'],
+        'courseid' => $courseid,
+        'exportformat' => $exportformat,
+    ], $filterparams)));
+}
+
 $reportname = format_string($report->name);
 $hasmanageallcap = has_capability('block/configurable_reports:managereports', $context);
 $hasmanageowncap = has_capability('block/configurable_reports:manageownreports', $context);
@@ -226,6 +236,7 @@ $chainlisturl = new moodle_url('/blocks/configurable_reports/chainexport.php', a
     'id' => $id,
     'courseid' => $courseid,
 ], $filterparams));
+$chainexportbackurl = $singlechainmode ? $viewreporturl : $chainlisturl;
 
 if ($chainid) {
     $chainelement = definition::get_chain_element_by_id($report, $chainid);
@@ -279,7 +290,7 @@ if ($chainid) {
     ]);
 
     if ($form->is_cancelled()) {
-        redirect($chainlisturl);
+        redirect($chainexportbackurl);
     }
 
     if ($form->is_submitted() && $form->is_validated()) {
@@ -372,7 +383,7 @@ EOT
 
     echo $OUTPUT->header();
     block_configurable_reports_chainexport_print_tabs($report, $reportclass, $context);
-    block_configurable_reports_chainexport_render_back_link($OUTPUT, $chainlisturl);
+    block_configurable_reports_chainexport_render_back_link($OUTPUT, $chainexportbackurl);
     echo $OUTPUT->heading($pageheading);
 
     if ($exportdone) {
@@ -398,8 +409,13 @@ EOT
                     'sesskey' => sesskey(),
                 ], $filterparams));
                 echo html_writer::div(
-                    $OUTPUT->single_button($downloadurl, get_string('chainexportdownloadzip', 'block_configurable_reports'), 'get'),
-                    'mb-3'
+                    $OUTPUT->single_button(
+                        $downloadurl,
+                        get_string('chainexportdownloadzip', 'block_configurable_reports'),
+                        'get',
+                        ['class' => 'btn btn-primary']
+                    ),
+                    'mb-3 chainexport-downloadzip'
                 );
             } else if ($zipdownloaded || $summaryresult->has_exports()) {
                 echo $OUTPUT->notification(get_string('chainexportzipalreadydownloaded', 'block_configurable_reports'), 'info');
@@ -425,7 +441,7 @@ EOT
     } else {
         $form->display();
     }
-    echo $OUTPUT->single_button($chainlisturl, get_string('back'), 'get');
+    echo $OUTPUT->single_button($chainexportbackurl, get_string('back'), 'get');
     echo $OUTPUT->footer();
     exit;
 }
