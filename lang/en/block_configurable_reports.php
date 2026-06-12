@@ -665,6 +665,7 @@ $string['chainrowkeycolumns_help'] = 'Comma-separated source report column names
 $string['chainsourcecolumn'] = 'Source report column';
 $string['chaintargetfilter'] = 'Target report filter parameter';
 $string['chainmappingheader'] = 'Mapping {$a}';
+$string['chainmappingcolumnsheader'] = 'Source report column → Target report filter parameter';
 $string['chainaddmapping'] = 'Add mapping';
 $string['chainselectchildhint'] = 'Select a child report to configure mappings and export settings.';
 $string['chainconfig_update'] = 'Update';
@@ -696,7 +697,7 @@ $string['chainexportsummaryfile'] = 'File';
 $string['chainexportsummaryreason'] = 'Reason';
 $string['chainexportzipalreadydownloaded'] = 'The export archive has already been downloaded. Run the export again if you need a new copy.';
 $string['jsonunicode'] = 'JSON export: preserve Unicode characters';
-$string['jsonunicodeinfo'] = 'When enabled, JSON exports write non-ASCII characters as-is instead of \\uXXXX escape sequences (equivalent to ensure_ascii=false).';
+$string['jsonunicodeinfo'] = 'When enabled, JSON exports write non-ASCII characters as-is instead of \\uXXXX escape sequences.';
 $string['chainmaxrows'] = 'Chain export row limit';
 $string['chainmaxrowsinfo'] = 'Maximum number of source rows that can be exported in one chain download.';
 $string['chainerror_nochild'] = 'Select a child report.';

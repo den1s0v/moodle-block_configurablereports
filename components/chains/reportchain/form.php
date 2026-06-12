@@ -97,6 +97,12 @@ class reportchain_form extends moodleform {
         }
 
         $mappingcount = max(1, (int) ($this->_customdata['mappingcount'] ?? 1));
+
+        $mform->addElement('static', 'mappingcolumnsheader', '',
+            html_writer::div(
+                get_string('chainmappingcolumnsheader', 'block_configurable_reports'),
+                'chain-mapping-columns-header fw-bold mb-2'
+            ));
         $this->add_mapping_groups($mform, $mappingcount, $filteroptions);
 
         $mform->addElement('hidden', 'mappingcount', $mappingcount);
@@ -122,26 +128,25 @@ class reportchain_form extends moodleform {
      */
     protected function add_mapping_groups($mform, int $mappingcount, array $filteroptions): void {
         for ($i = 0; $i < $mappingcount; $i++) {
+            $sourcefield = 'sourcecolumn' . $i;
+            $targetfield = 'targetfilter' . $i;
             $groupelements = [];
-            $groupelements[] = $mform->createElement('text', 'sourcecolumn[' . $i . ']',
-                get_string('chainsourcecolumn', 'block_configurable_reports'), ['size' => 30]);
+            $groupelements[] = $mform->createElement('text', $sourcefield, '', ['size' => 30]);
             if (!empty($filteroptions)) {
-                $groupelements[] = $mform->createElement('select', 'targetfilter[' . $i . ']',
-                    get_string('chaintargetfilter', 'block_configurable_reports'), $filteroptions);
+                $groupelements[] = $mform->createElement('select', $targetfield, '', $filteroptions);
             } else {
-                $groupelements[] = $mform->createElement('text', 'targetfilter[' . $i . ']',
-                    get_string('chaintargetfilter', 'block_configurable_reports'), ['size' => 30]);
+                $groupelements[] = $mform->createElement('text', $targetfield, '', ['size' => 30]);
             }
 
             $mform->addGroup(
                 $groupelements,
                 'mappinggroup' . $i,
                 get_string('chainmappingheader', 'block_configurable_reports', $i + 1),
-                html_writer::empty_tag('br'),
+                html_writer::span(' → ', 'px-2'),
                 false
             );
-            $mform->setType('sourcecolumn[' . $i . ']', PARAM_RAW);
-            $mform->setType('targetfilter[' . $i . ']', PARAM_RAW);
+            $mform->setType($sourcefield, PARAM_RAW);
+            $mform->setType($targetfield, PARAM_RAW);
         }
     }
 
@@ -199,11 +204,44 @@ class reportchain_form extends moodleform {
      * @return string
      */
     protected function get_mapping_value(array $data, string $field, int $index): string {
-        if (!empty($data[$field]) && is_array($data[$field]) && array_key_exists($index, $data[$field])) {
-            return trim((string) $data[$field][$index]);
+        return $this->read_mapping_field((object) $data, $field, $index);
+    }
+
+    /**
+     * Read a mapping field from form data (top-level or inside a form group).
+     *
+     * @param object $data
+     * @param string $field
+     * @param int $index
+     * @return string
+     */
+    protected function read_mapping_field(object $data, string $field, int $index): string {
+        $key = $field . $index;
+        if (property_exists($data, $key)) {
+            return trim((string) $data->$key);
+        }
+
+        $groupkey = 'mappinggroup' . $index;
+        if (property_exists($data, $groupkey)) {
+            $group = $data->$groupkey;
+            if (is_array($group) && array_key_exists($key, $group)) {
+                return trim((string) $group[$key]);
+            }
+            if (is_object($group) && property_exists($group, $key)) {
+                return trim((string) $group->$key);
+            }
+        }
+
+        // Legacy bracket notation from older form versions.
+        if (property_exists($data, $field) && is_array($data->$field) && array_key_exists($index, $data->$field)) {
+            return trim((string) $data->$field[$index]);
         }
         $flatkey = $field . '[' . $index . ']';
-        return trim((string) ($data[$flatkey] ?? ''));
+        if (property_exists($data, $flatkey)) {
+            return trim((string) $data->$flatkey);
+        }
+
+        return '';
     }
 
     /**
@@ -215,18 +253,19 @@ class reportchain_form extends moodleform {
     public function set_data($data): void {
         $data = (object) $data;
         if (!empty($data->mappings)) {
-            if (!isset($data->sourcecolumn) || !is_array($data->sourcecolumn)) {
-                $data->sourcecolumn = [];
-                $data->targetfilter = [];
-            }
             $index = 0;
             foreach ($data->mappings as $mapping) {
                 $mapping = (object) $mapping;
-                $data->sourcecolumn[$index] = $mapping->sourcecolumn ?? '';
-                $data->targetfilter[$index] = $mapping->targetfilter ?? '';
+                $sourcefield = 'sourcecolumn' . $index;
+                $targetfield = 'targetfilter' . $index;
+                $data->$sourcefield = $mapping->sourcecolumn ?? '';
+                $data->$targetfield = $mapping->targetfilter ?? '';
                 $index++;
             }
             $data->mappingcount = $index;
+        }
+        if (!empty($this->_customdata['mappingcount'])) {
+            $data->mappingcount = max((int) ($data->mappingcount ?? 1), (int) $this->_customdata['mappingcount']);
         }
         if (!empty($data->rowkeycolumns) && is_array($data->rowkeycolumns)) {
             $data->rowkeycolumns = implode(', ', $data->rowkeycolumns);
@@ -247,17 +286,8 @@ class reportchain_form extends moodleform {
         $mappings = [];
         $mappingcount = max(1, (int) ($data->mappingcount ?? 1));
         for ($i = 0; $i < $mappingcount; $i++) {
-            $source = '';
-            $target = '';
-            if (!empty($data->sourcecolumn) && is_array($data->sourcecolumn)) {
-                $source = trim((string) ($data->sourcecolumn[$i] ?? ''));
-                $target = trim((string) ($data->targetfilter[$i] ?? ''));
-            } else {
-                $sourcekey = 'sourcecolumn[' . $i . ']';
-                $targetkey = 'targetfilter[' . $i . ']';
-                $source = trim((string) ($data->$sourcekey ?? ''));
-                $target = trim((string) ($data->$targetkey ?? ''));
-            }
+            $source = $this->read_mapping_field($data, 'sourcecolumn', $i);
+            $target = $this->read_mapping_field($data, 'targetfilter', $i);
             if ($source === '' || $target === '') {
                 continue;
             }
@@ -267,7 +297,10 @@ class reportchain_form extends moodleform {
             ];
         }
         $data->mappings = $mappings;
-        unset($data->mappingcount, $data->sourcecolumn, $data->targetfilter);
+        for ($i = 0; $i < $mappingcount; $i++) {
+            unset($data->{'sourcecolumn' . $i}, $data->{'targetfilter' . $i}, $data->{'mappinggroup' . $i});
+        }
+        unset($data->mappingcount);
         return $data;
     }
 }

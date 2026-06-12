@@ -104,6 +104,7 @@ $string['chainrowkeycolumns_help'] = 'Имена колонок отчёта-и�
 $string['chainsourcecolumn'] = 'Колонка отчёта-источника';
 $string['chaintargetfilter'] = 'Параметр фильтра целевого отчёта';
 $string['chainmappingheader'] = 'Сопоставление {$a}';
+$string['chainmappingcolumnsheader'] = 'Колонка отчёта-источника → Параметр фильтра целевого отчёта';
 $string['chainaddmapping'] = 'Добавить сопоставление';
 $string['chainselectchildhint'] = 'Выберите целевой отчёт, чтобы настроить сопоставления и параметры экспорта.';
 $string['chainconfig_update'] = 'Обновить';
@@ -135,7 +136,7 @@ $string['chainexportsummaryfile'] = 'Файл';
 $string['chainexportsummaryreason'] = 'Причина';
 $string['chainexportzipalreadydownloaded'] = 'Архив экспорта уже был скачан. Запустите экспорт снова, если нужна новая копия.';
 $string['jsonunicode'] = 'JSON-экспорт: сохранять символы Unicode';
-$string['jsonunicodeinfo'] = 'Если включено, в JSON не-ASCII символы записываются как есть, без escape-последовательностей \\uXXXX (аналог ensure_ascii=false).';
+$string['jsonunicodeinfo'] = 'Если включено, в JSON не-ASCII символы записываются как есть, без escape-последовательностей \\uXXXX.';
 $string['chainmaxrows'] = 'Лимит строк для экспорта по цепочке';
 $string['chainmaxrowsinfo'] = 'Максимальное число строк отчёта-источника в одной выгрузке по цепочке.';
 $string['chainerror_nochild'] = 'Выберите целевой отчёт.';

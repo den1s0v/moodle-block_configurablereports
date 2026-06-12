@@ -162,7 +162,7 @@ if (isset($pluginclass->form) && $pluginclass->form) {
     $formcustomdata = compact('comp', 'cid', 'id', 'pluginclass', 'compclass', 'report', 'reportclass');
     if ($comp === 'chains' && $pname === 'reportchain') {
         $formcustomdata['submitlabel'] = ($cid !== '')
-            ? get_string('chainconfig_update', 'block_configurable_reports')
+            ? get_string('filterconfig_save', 'block_configurable_reports')
             : get_string('add', 'block_configurable_reports');
         if (!empty($cdata)) {
             $storedform = (object) ($cdata['formdata'] ?? new stdClass());
