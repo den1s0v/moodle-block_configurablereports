@@ -408,7 +408,10 @@ EOT
                     'exportformat' => $exportformat,
                     'sesskey' => sesskey(),
                 ], $filterparams));
+                $exportedcount = count($summaryresult->exported);
                 echo html_writer::div(
+                    html_writer::tag('p', get_string('chainexportdownloadready', 'block_configurable_reports', $exportedcount),
+                        ['class' => 'chainexport-downloadready mb-2']) .
                     html_writer::link(
                         $downloadurl,
                         get_string('chainexportdownloadzip', 'block_configurable_reports'),

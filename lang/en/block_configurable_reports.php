@@ -674,6 +674,7 @@ $string['chainexportrows'] = 'Rows';
 $string['chainexportformat'] = 'Export format';
 $string['chainexportdownload'] = 'Export selected';
 $string['chainexportdownloadzip'] = 'Download ZIP archive';
+$string['chainexportdownloadready'] = 'Files exported and archived: {$a}. Available for download:';
 $string['chainexportsummaryheading'] = 'Exported files';
 $string['chainexportskippedheading'] = 'Skipped rows';
 $string['chainexportskippednodata'] = 'No data in child report';

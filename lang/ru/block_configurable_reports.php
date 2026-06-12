@@ -113,6 +113,7 @@ $string['chainexportrows'] = 'Строки';
 $string['chainexportformat'] = 'Формат экспорта';
 $string['chainexportdownload'] = 'Экспортировать выбранные';
 $string['chainexportdownloadzip'] = 'Скачать ZIP-архив';
+$string['chainexportdownloadready'] = 'Файлов экспортировано и архивировано: {$a}. Доступно к скачиванию:';
 $string['chainexportsummaryheading'] = 'Экспортированные файлы';
 $string['chainexportskippedheading'] = 'Пропущенные строки';
 $string['chainexportskippednodata'] = 'В целевом отчёте нет данных';
