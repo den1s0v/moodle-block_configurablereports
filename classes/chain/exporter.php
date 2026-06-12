@@ -47,38 +47,41 @@ class exporter {
      * @return string Path to zip file.
      */
     public function create_zip_archive(array $files, string $zipfilename): string {
-        $tempdir = make_temp_directory('block_configurable_reports/chainexport');
-        $zippath = $tempdir . '/' . clean_filename($zipfilename);
+        $tempdir = temp_file_cleanup::get_temp_directory();
+        $zippath = $tempdir . '/' . uniqid('zip_', true) . '_' . clean_filename($zipfilename);
 
         $zip = new \zip_archive();
         if ($zip->open($zippath, \file_archive::CREATE) !== true) {
             throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
         }
 
-        $usednames = [];
-        foreach ($files as $file) {
-            $entryname = $file['name'];
-            if (isset($usednames[$entryname])) {
-                $usednames[$entryname]++;
-                $dot = strrpos($entryname, '.');
-                if ($dot !== false) {
-                    $entryname = substr($entryname, 0, $dot) . '_' . $usednames[$entryname] . substr($entryname, $dot);
+        try {
+            $usednames = [];
+            foreach ($files as $file) {
+                $entryname = $file['name'];
+                if (isset($usednames[$entryname])) {
+                    $usednames[$entryname]++;
+                    $dot = strrpos($entryname, '.');
+                    if ($dot !== false) {
+                        $entryname = substr($entryname, 0, $dot) . '_' . $usednames[$entryname] . substr($entryname, $dot);
+                    } else {
+                        $entryname .= '_' . $usednames[$entryname];
+                    }
                 } else {
-                    $entryname .= '_' . $usednames[$entryname];
+                    $usednames[$entryname] = 1;
                 }
-            } else {
-                $usednames[$entryname] = 1;
-            }
 
-            if (!$zip->add_file_from_pathname($entryname, $file['path'])) {
-                $zip->close();
-                throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
+                if (!$zip->add_file_from_pathname($entryname, $file['path'])) {
+                    throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
+                }
             }
-        }
-        $zip->close();
-
-        foreach ($files as $file) {
-            @unlink($file['path']);
+            $zip->close();
+        } catch (\Throwable $e) {
+            $zip->close();
+            temp_file_cleanup::delete_file_if_exists($zippath);
+            throw $e;
+        } finally {
+            temp_file_cleanup::cleanup_temp_files(array_column($files, 'path'));
         }
 
         return $zippath;

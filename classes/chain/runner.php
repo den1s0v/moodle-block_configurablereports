@@ -43,6 +43,9 @@ class runner {
     /** @var int */
     private int $userid;
 
+    /** @var \report_base|null */
+    private ?\report_base $parentreportclass = null;
+
     /**
      * Constructor.
      *
@@ -60,16 +63,26 @@ class runner {
     }
 
     /**
+     * Parent report table column headings for preview UI.
+     *
+     * @return array<int|string, string>
+     */
+    public function get_parent_table_head(): array {
+        $table = $this->load_parent_report()->finalreport->table;
+        $head = [];
+        foreach ($table->head ?? [] as $key => $heading) {
+            $head[$key] = \block_configurable_reports\export\report_matrix::cell_to_plain_text($heading);
+        }
+        return $head;
+    }
+
+    /**
      * Execute parent report and return table rows with selection metadata.
      *
      * @return array<int, object> List of row descriptors.
      */
     public function get_parent_row_descriptors(): array {
-        $reportclass = $this->create_parent_report_instance();
-        if ($reportclass->should_defer_execution()) {
-            throw new \moodle_exception('filtersubmitrequired', 'block_configurable_reports');
-        }
-        $reportclass->create_report();
+        $reportclass = $this->load_parent_report();
 
         if (empty($reportclass->finalreport->table->data)) {
             return [];
@@ -97,12 +110,7 @@ class runner {
      * @return array<int, int> Parent table row indexes.
      */
     public function resolve_selected_row_indexes(array $selectedrowkeys): array {
-        $reportclass = $this->create_parent_report_instance();
-        if ($reportclass->should_defer_execution()) {
-            throw new \moodle_exception('filtersubmitrequired', 'block_configurable_reports');
-        }
-        $reportclass->create_report();
-
+        $reportclass = $this->load_parent_report();
         $table = $reportclass->finalreport->table;
         $indexes = [];
         foreach (array_keys($table->data) as $rowindex) {
@@ -149,11 +157,7 @@ class runner {
             throw new \moodle_exception('badpermissions', 'block_configurable_reports');
         }
 
-        $parentclass = $this->create_parent_report_instance();
-        if ($parentclass->should_defer_execution()) {
-            throw new \moodle_exception('filtersubmitrequired', 'block_configurable_reports');
-        }
-        $parentclass->create_report();
+        $parentclass = $this->load_parent_report();
         $table = $parentclass->finalreport->table;
 
         $rowindexes = $this->resolve_selected_row_indexes($selectedrowkeys);
@@ -161,61 +165,68 @@ class runner {
             throw new \moodle_exception('chainerror_norows', 'block_configurable_reports');
         }
 
+        temp_file_cleanup::cleanup_stale_files();
+
         $exporter = new exporter();
         $files = [];
         $rownum = 0;
-        foreach ($rowindexes as $rowindex) {
-            $rownum++;
-            $keyvalues = definition::extract_row_key_values($table, $rowindex, $this->formdata->rowkeycolumns);
-            $rowlabel = implode(' / ', array_filter($keyvalues));
-            if ($rowlabel === '') {
-                $rowlabel = get_string('chainexportrownumber', 'block_configurable_reports', $rownum);
-            }
+        try {
+            foreach ($rowindexes as $rowindex) {
+                $rownum++;
+                $keyvalues = definition::extract_row_key_values($table, $rowindex, $this->formdata->rowkeycolumns);
+                $rowlabel = implode(' / ', array_filter($keyvalues));
+                if ($rowlabel === '') {
+                    $rowlabel = get_string('chainexportrownumber', 'block_configurable_reports', $rownum);
+                }
 
-            $filterparams = definition::build_filter_params_for_row($table, $rowindex, $this->formdata);
-            $childfinal = $this->execute_child_report($childreport, $filterparams);
+                $filterparams = definition::build_filter_params_for_row($table, $rowindex, $this->formdata);
+                $childfinal = $this->execute_child_report($childreport, $filterparams);
 
-            if (!definition::finalreport_has_data($childfinal)) {
-                $result->skipped[] = (object) [
-                    'label' => $rowlabel,
-                    'reason' => get_string('chainexportskippednodata', 'block_configurable_reports'),
-                ];
-                continue;
-            }
-
-            $placeholders = [];
-            foreach ($this->formdata->rowkeycolumns as $i => $column) {
-                $placeholders['col' . ($i + 1)] = definition::extract_row_key_values($table, $rowindex, [$column])[0] ?? '';
-                $placeholders[$column] = $placeholders['col' . ($i + 1)];
-            }
-            $placeholders['row'] = (string) $rownum;
-
-            $filename = definition::build_filename($childreport, $this->formdata, $placeholders, $format);
-            try {
-                $temppath = $exporter->export_child_report_to_tempfile($childfinal, $format, $filename);
-            } catch (\moodle_exception $e) {
-                if ($e->errorcode === 'chainerror_exportempty') {
+                if (!definition::finalreport_has_data($childfinal)) {
                     $result->skipped[] = (object) [
                         'label' => $rowlabel,
                         'reason' => get_string('chainexportskippednodata', 'block_configurable_reports'),
                     ];
                     continue;
                 }
-                throw $e;
+
+                $placeholders = [];
+                foreach ($this->formdata->rowkeycolumns as $i => $column) {
+                    $placeholders['col' . ($i + 1)] = definition::extract_row_key_values($table, $rowindex, [$column])[0] ?? '';
+                    $placeholders[$column] = $placeholders['col' . ($i + 1)];
+                }
+                $placeholders['row'] = (string) $rownum;
+
+                $filename = definition::build_filename($childreport, $this->formdata, $placeholders, $format);
+                try {
+                    $temppath = $exporter->export_child_report_to_tempfile($childfinal, $format, $filename);
+                } catch (\moodle_exception $e) {
+                    if ($e->errorcode === 'chainerror_exportempty') {
+                        $result->skipped[] = (object) [
+                            'label' => $rowlabel,
+                            'reason' => get_string('chainexportskippednodata', 'block_configurable_reports'),
+                        ];
+                        continue;
+                    }
+                    throw $e;
+                }
+
+                $files[] = [
+                    'name' => $filename,
+                    'path' => $temppath,
+                ];
+                $result->exported[] = (object) [
+                    'label' => $rowlabel,
+                    'filename' => $filename,
+                ];
             }
 
-            $files[] = [
-                'name' => $filename,
-                'path' => $temppath,
-            ];
-            $result->exported[] = (object) [
-                'label' => $rowlabel,
-                'filename' => $filename,
-            ];
-        }
-
-        if (!empty($files)) {
-            $result->zippath = $exporter->create_zip_archive($files, $result->zipfilename);
+            if (!empty($files)) {
+                $result->zippath = $exporter->create_zip_archive($files, $result->zipfilename);
+            }
+        } catch (\Throwable $e) {
+            temp_file_cleanup::cleanup_temp_files(array_column($files, 'path'));
+            throw $e;
         }
 
         return $result;
@@ -247,6 +258,23 @@ class runner {
         } finally {
             $childclass->clear_injected_filter_params();
         }
+    }
+
+    /**
+     * Execute parent report once and cache the instance.
+     *
+     * @return \report_base
+     */
+    private function load_parent_report(): \report_base {
+        if ($this->parentreportclass === null) {
+            $reportclass = $this->create_parent_report_instance();
+            if ($reportclass->should_defer_execution()) {
+                throw new \moodle_exception('filtersubmitrequired', 'block_configurable_reports');
+            }
+            $reportclass->create_report();
+            $this->parentreportclass = $reportclass;
+        }
+        return $this->parentreportclass;
     }
 
     /**

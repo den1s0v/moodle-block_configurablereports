@@ -47,7 +47,7 @@ class report_exporter {
             throw new \moodle_exception('chainerror_exportformat', 'block_configurable_reports');
         }
 
-        $tempdir = make_temp_directory('block_configurable_reports/chainexport');
+        $tempdir = \block_configurable_reports\chain\temp_file_cleanup::get_temp_directory();
         $safeentryname = clean_filename($filename);
         $filepath = $tempdir . '/' . uniqid('chain_', true) . '_' . $safeentryname;
 

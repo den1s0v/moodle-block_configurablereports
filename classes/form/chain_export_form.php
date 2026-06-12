@@ -20,6 +20,8 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($GLOBALS['CFG']->libdir . '/formslib.php');
 
+use block_configurable_reports\export\report_matrix;
+
 /**
  * Chain export row selection form.
  *
@@ -62,17 +64,69 @@ class chain_export_form extends \moodleform {
             $custom['formats']);
         $mform->addRule('exportformat', null, 'required', null, 'client');
 
-        $selectall = [];
-        foreach ($custom['rows'] as $row) {
-            $selectall[] = $mform->createElement('advcheckbox', 'rowkey_' . $row->rowkey, '',
-                s($row->label), ['group' => 1], [0, 1]);
-        }
-        if (!empty($selectall)) {
-            $mform->addGroup($selectall, 'rowkeys', get_string('chainexportrows', 'block_configurable_reports'),
-                '<br />', false);
+        if (!empty($custom['rows'])) {
+            $mform->addElement('html', self::render_rows_table($custom['head'] ?? [], $custom['rows']));
         }
 
         $this->add_action_buttons(false, get_string('chainexportdownload', 'block_configurable_reports'));
+    }
+
+    /**
+     * Render parent rows as a selectable table.
+     *
+     * @param array<int|string, string> $head
+     * @param array<int, object> $rows
+     * @return string
+     */
+    public static function render_rows_table(array $head, array $rows): string {
+        $table = new \html_table();
+        $table->attributes['class'] = 'generaltable chainexport-rowtable';
+        $table->id = 'chainexport-rowtable';
+
+        $selectall = \html_writer::empty_tag('input', [
+            'type' => 'checkbox',
+            'id' => 'chainexport-selectall',
+            'checked' => 'checked',
+            'title' => get_string('chainexportselectall', 'block_configurable_reports'),
+        ]);
+        $headercells = [$selectall];
+        foreach ($head as $heading) {
+            $headercells[] = $heading;
+        }
+        $table->head = $headercells;
+
+        foreach ($rows as $row) {
+            $cells = [
+                \html_writer::empty_tag('input', [
+                    'type' => 'checkbox',
+                    'name' => 'rowkey_' . $row->rowkey,
+                    'value' => '1',
+                    'class' => 'chainexport-rowcb',
+                    'checked' => 'checked',
+                ]),
+            ];
+            foreach ($row->cells as $cell) {
+                $cells[] = s(report_matrix::cell_to_plain_text($cell));
+            }
+            $table->data[] = $cells;
+        }
+
+        return \html_writer::table($table);
+    }
+
+    /**
+     * Ensure at least one row is selected.
+     *
+     * @param array $data
+     * @param array $files
+     * @return array
+     */
+    public function validation($data, $files) {
+        $errors = parent::validation($data, $files);
+        if (empty(self::extract_selected_rowkeys((object) $data))) {
+            $errors['chainexportheader'] = get_string('chainexportnorowsselected', 'block_configurable_reports');
+        }
+        return $errors;
     }
 
     /**
