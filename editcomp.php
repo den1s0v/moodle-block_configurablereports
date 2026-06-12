@@ -189,6 +189,27 @@ if ($elements) {
 
         $editcell = '';
 
+        if ($comp === 'chains') {
+            $chainform = \block_configurable_reports\chain\definition::normalise_formdata((object) ($e['formdata'] ?? new stdClass()));
+            $enabled = !empty($chainform->enabled);
+            $toggleurl = new moodle_url('/blocks/configurable_reports/editplugin.php', [
+                'id' => $id,
+                'comp' => $comp,
+                'pname' => $e['pluginname'],
+                'cid' => $e['id'],
+                'toggleenabled' => 1,
+                'sesskey' => sesskey(),
+            ]);
+            $toggleicon = $enabled ? 't/hide' : 't/show';
+            $togglelabel = $enabled
+                ? get_string('chaindisable', 'block_configurable_reports')
+                : get_string('chainenable', 'block_configurable_reports');
+            $editcell .= html_writer::link($toggleurl, $OUTPUT->pix_icon($toggleicon, $togglelabel), [
+                'title' => $togglelabel,
+                'class' => 'action-icon chain-toggle-enabled',
+            ]);
+        }
+
         if ($pluginclass->form) {
             $editcell .= '<a href="editplugin.php?id=' . $id . '&comp=' . $comp . '&pname=' . $e['pluginname'] . '&cid=' .
                 $e['id'] . '">' .

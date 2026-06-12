@@ -56,15 +56,25 @@ class plugin_reportchain extends plugin_base {
         }
 
         $childname = format_string($child->name);
-        if ($data->chainname !== '') {
-            $a = (object) [
-                'chain' => format_string($data->chainname),
-                'child' => $childname,
-            ];
-            return get_string('reportchain_summary_named', 'block_configurable_reports', $a);
+        $mappingparts = [];
+        foreach ($data->mappings as $mapping) {
+            $mapping = (object) $mapping;
+            $source = trim((string) ($mapping->sourcecolumn ?? ''));
+            $target = trim((string) ($mapping->targetfilter ?? ''));
+            if ($source === '' || $target === '') {
+                continue;
+            }
+            $mappingparts[] = s($source) . ' ? ' . s($target);
         }
 
-        return get_string('reportchain_summary', 'block_configurable_reports', $childname);
+        $a = (object) [
+            'target' => $childname,
+            'mappings' => !empty($mappingparts)
+                ? implode('; ', $mappingparts)
+                : get_string('reportchain_summary_nomappings', 'block_configurable_reports'),
+        ];
+
+        return get_string('reportchain_summary_full', 'block_configurable_reports', $a);
     }
 
     /**

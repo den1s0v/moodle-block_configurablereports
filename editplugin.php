@@ -35,6 +35,7 @@ $pname = optional_param('pname', '', PARAM_ALPHA);
 $moveup = optional_param('moveup', 0, PARAM_INT);
 $movedown = optional_param('movedown', 0, PARAM_INT);
 $delete = optional_param('delete', 0, PARAM_INT);
+$toggleenabled = optional_param('toggleenabled', 0, PARAM_BOOL);
 
 if (!$pname) {
     redirect(new moodle_url('/blocks/configurable_reports/editcomp.php', ['id' => $id, 'comp' => $comp]));
@@ -101,11 +102,23 @@ if (!$cid) {
         }
     }
 
-    if (($moveup || $movedown || $delete) && confirm_sesskey()) {
+    if (($moveup || $movedown || $delete || $toggleenabled) && confirm_sesskey()) {
         foreach ($elements as $index => $e) {
             if ($e['id'] == $cid) {
                 if ($delete) {
                     unset($elements[$index]);
+                    break;
+                }
+                if ($toggleenabled && $comp === 'chains') {
+                    $formdata = (array) ($e['formdata'] ?? []);
+                    $normalised = \block_configurable_reports\chain\definition::normalise_formdata((object) $formdata);
+                    $formdata['enabled'] = empty($normalised->enabled) ? 1 : 0;
+                    $elements[$index]['formdata'] = $formdata;
+                    require_once($CFG->dirroot . '/blocks/configurable_reports/components/' . $comp . '/' .
+                        $e['pluginname'] . '/plugin.class.php');
+                    $pluginclassname = 'plugin_' . $e['pluginname'];
+                    $toggleplugin = new $pluginclassname($report);
+                    $elements[$index]['summary'] = $toggleplugin->summary((object) $formdata);
                     break;
                 }
                 $newindex = ($moveup) ? $index - 1 : $index + 1;
@@ -158,6 +171,11 @@ if (isset($pluginclass->form) && $pluginclass->form) {
             }
             $formcustomdata['initialmappingcount'] = max(1, count($storedform->mappings ?? []));
         }
+        $requestedmappingcount = optional_param('mappingcount', 0, PARAM_INT);
+        $formcustomdata['mappingcount'] = $requestedmappingcount > 0
+            ? $requestedmappingcount
+            : ($formcustomdata['initialmappingcount'] ?? 1);
+        $formcustomdata['formbaseurl'] = $formurl->out(false);
     } else {
         $formcustomdata['submitlabel'] = ($cid !== '')
             ? get_string('filterconfig_save', 'block_configurable_reports')

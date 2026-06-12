@@ -256,7 +256,7 @@ if ($chainid) {
     $formats = definition::get_allowed_export_formats($childreport);
     $chaincontextlabel = definition::get_chain_list_label($chainelement, $childreport);
     $pageheading = get_string('chainexportheadingcontext', 'block_configurable_reports', (object) [
-        'parent' => $reportname,
+        'source' => $reportname,
         'chain' => $chaincontextlabel,
     ]);
 
