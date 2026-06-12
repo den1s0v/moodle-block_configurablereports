@@ -30,7 +30,7 @@ class report_exporter {
      *
      * @param object $finalreport
      * @param string $format
-     * @param string $filename Suggested filename without path.
+     * @param string $filename Suggested archive entry filename.
      * @return string Absolute path to temp file.
      */
     public static function write_to_tempfile(object $finalreport, string $format, string $filename): string {
@@ -43,18 +43,36 @@ class report_exporter {
 
         require_once($exportplugin);
 
-        $tempdir = make_temp_directory('block_configurable_reports/chainexport');
-        $filepath = $tempdir . '/' . clean_filename($filename);
-
         if (!function_exists('export_report_to_path')) {
             throw new \moodle_exception('chainerror_exportformat', 'block_configurable_reports');
         }
 
-        if (in_array($format, ['xls', 'ods'], true)) {
-            export_report_to_path($finalreport, $filepath, clean_filename($filename));
-        } else {
-            export_report_to_path($finalreport, $filepath);
+        $tempdir = make_temp_directory('block_configurable_reports/chainexport');
+        $safeentryname = clean_filename($filename);
+        $filepath = $tempdir . '/' . uniqid('chain_', true) . '_' . $safeentryname;
+
+        ob_start();
+        try {
+            if (in_array($format, ['xls', 'ods'], true)) {
+                export_report_to_path($finalreport, $filepath, $safeentryname);
+            } else {
+                export_report_to_path($finalreport, $filepath);
+            }
+        } finally {
+            $buffered = ob_get_clean();
+            if ($buffered !== '') {
+                throw new \moodle_exception('chainerror_exportformat', 'block_configurable_reports');
+            }
         }
+
+        clearstatcache(true, $filepath);
+        if (!is_file($filepath) || filesize($filepath) === 0) {
+            if (is_file($filepath)) {
+                @unlink($filepath);
+            }
+            throw new \moodle_exception('chainerror_exportempty', 'block_configurable_reports');
+        }
+
         return $filepath;
     }
 

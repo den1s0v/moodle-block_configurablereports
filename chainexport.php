@@ -25,12 +25,46 @@ require_once($CFG->dirroot . '/blocks/configurable_reports/locallib.php');
 require_once($CFG->dirroot . '/blocks/configurable_reports/report.class.php');
 
 use block_configurable_reports\chain\definition;
+use block_configurable_reports\chain\export_result;
 use block_configurable_reports\chain\runner;
 use block_configurable_reports\form\chain_export_form;
+
+/**
+ * Render export summary after a chain bulk export.
+ *
+ * @param renderer_base $output
+ * @param export_result $result
+ * @return void
+ */
+function block_configurable_reports_render_chainexport_summary($output, export_result $result): void {
+    if (!empty($result->exported)) {
+        echo html_writer::tag('h4', get_string('chainexportsummaryheading', 'block_configurable_reports'));
+        echo html_writer::start_tag('ul');
+        foreach ($result->exported as $item) {
+            echo html_writer::tag('li', s($item->label) . ' — ' . s($item->filename));
+        }
+        echo html_writer::end_tag('ul');
+    }
+
+    if (!empty($result->skipped)) {
+        echo html_writer::tag('h4', get_string('chainexportskippedheading', 'block_configurable_reports'));
+        echo html_writer::start_tag('ul');
+        foreach ($result->skipped as $item) {
+            echo html_writer::tag('li', s($item->label) . ' — ' . s($item->reason));
+        }
+        echo html_writer::end_tag('ul');
+    }
+
+    if (!$result->has_exports()) {
+        echo $output->notification(get_string('chainexportnoexported', 'block_configurable_reports'), 'warning');
+    }
+}
 
 $id = required_param('id', PARAM_INT);
 $chainid = optional_param('chainid', '', PARAM_ALPHANUMEXT);
 $courseid = optional_param('courseid', null, PARAM_INT);
+$downloadzip = optional_param('downloadzip', 0, PARAM_BOOL);
+$exportdone = optional_param('exportdone', 0, PARAM_BOOL);
 
 if (!$report = $DB->get_record('block_configurable_reports', ['id' => $id])) {
     throw new moodle_exception('reportdoesnotexists', 'block_configurable_reports');
@@ -60,6 +94,21 @@ $reportclass = new $reportclassname($report);
 
 if (!$reportclass->check_permissions($USER->id, $context)) {
     throw new moodle_exception('badpermissions', 'block_configurable_reports');
+}
+
+if ($downloadzip) {
+    require_sesskey();
+    if (empty($SESSION->block_configurable_reports_chainexport)
+        || ($SESSION->block_configurable_reports_chainexport['userid'] ?? 0) != $USER->id
+        || ($SESSION->block_configurable_reports_chainexport['reportid'] ?? 0) != $id
+        || empty($SESSION->block_configurable_reports_chainexport['zippath'])) {
+        throw new moodle_exception('chainerror_nozip', 'block_configurable_reports');
+    }
+
+    $zippath = $SESSION->block_configurable_reports_chainexport['zippath'];
+    $zipfilename = $SESSION->block_configurable_reports_chainexport['zipfilename'] ?? basename($zippath);
+    unset($SESSION->block_configurable_reports_chainexport);
+    send_temp_file($zippath, $zipfilename);
 }
 
 $activechains = definition::get_active_chain_elements($report);
@@ -117,9 +166,35 @@ if ($chainid) {
         raise_memory_limit(MEMORY_EXTRA);
 
         $selectedrowkeys = chain_export_form::extract_selected_rowkeys($data);
-        $zippath = $runnerinstance->export_selected_rows($selectedrowkeys, $data->exportformat);
-        send_temp_file($zippath, basename($zippath));
-        exit;
+        $exportresult = $runnerinstance->export_selected_rows($selectedrowkeys, $data->exportformat);
+
+        if ($exportresult->has_exports()) {
+            $SESSION->block_configurable_reports_chainexport = [
+                'userid' => (int) $USER->id,
+                'reportid' => (int) $id,
+                'chainid' => $chainid,
+                'zippath' => $exportresult->zippath,
+                'zipfilename' => $exportresult->zipfilename,
+                'exported' => $exportresult->exported,
+                'skipped' => $exportresult->skipped,
+            ];
+        } else {
+            unset($SESSION->block_configurable_reports_chainexport);
+            $SESSION->block_configurable_reports_chainexport_summary = [
+                'userid' => (int) $USER->id,
+                'reportid' => (int) $id,
+                'chainid' => $chainid,
+                'exported' => [],
+                'skipped' => $exportresult->skipped,
+            ];
+        }
+
+        redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+            'id' => $id,
+            'chainid' => $chainid,
+            'courseid' => $courseid,
+            'exportdone' => 1,
+        ], $filterparams)));
     }
 
     $defaultdata = new stdClass();
@@ -141,6 +216,41 @@ if ($chainid) {
         html_writer::link($viewreporturl, get_string('chainexportviewreport', 'block_configurable_reports')),
         'mb-3'
     );
+
+    if ($exportdone) {
+        $summaryresult = new export_result();
+        if (!empty($SESSION->block_configurable_reports_chainexport)
+            && ($SESSION->block_configurable_reports_chainexport['userid'] ?? 0) == $USER->id
+            && ($SESSION->block_configurable_reports_chainexport['reportid'] ?? 0) == $id
+            && ($SESSION->block_configurable_reports_chainexport['chainid'] ?? '') === $chainid) {
+            $summaryresult->exported = $SESSION->block_configurable_reports_chainexport['exported'] ?? [];
+            $summaryresult->skipped = $SESSION->block_configurable_reports_chainexport['skipped'] ?? [];
+            $summaryresult->zippath = $SESSION->block_configurable_reports_chainexport['zippath'] ?? null;
+            $summaryresult->zipfilename = $SESSION->block_configurable_reports_chainexport['zipfilename'] ?? 'chainexport.zip';
+
+            $downloadurl = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+                'id' => $id,
+                'chainid' => $chainid,
+                'courseid' => $courseid,
+                'downloadzip' => 1,
+                'sesskey' => sesskey(),
+            ], $filterparams));
+            echo html_writer::div(
+                $OUTPUT->single_button($downloadurl, get_string('chainexportdownloadzip', 'block_configurable_reports'), 'get'),
+                'mb-3'
+            );
+        } else if (!empty($SESSION->block_configurable_reports_chainexport_summary)
+            && ($SESSION->block_configurable_reports_chainexport_summary['userid'] ?? 0) == $USER->id
+            && ($SESSION->block_configurable_reports_chainexport_summary['reportid'] ?? 0) == $id
+            && ($SESSION->block_configurable_reports_chainexport_summary['chainid'] ?? '') === $chainid) {
+            $summaryresult->skipped = $SESSION->block_configurable_reports_chainexport_summary['skipped'] ?? [];
+            unset($SESSION->block_configurable_reports_chainexport_summary);
+        }
+
+        block_configurable_reports_render_chainexport_summary($OUTPUT, $summaryresult);
+        echo html_writer::empty_tag('hr');
+    }
+
     echo html_writer::tag('p', get_string('chainexportintro', 'block_configurable_reports'));
     if (empty($rows)) {
         echo $OUTPUT->notification(get_string('norecordsfound', 'block_configurable_reports'), 'info');

@@ -126,10 +126,13 @@ class runner {
      *
      * @param array<int, string> $selectedrowkeys
      * @param string $format
-     * @return string Path to ZIP file.
+     * @return export_result
      */
-    public function export_selected_rows(array $selectedrowkeys, string $format): string {
+    public function export_selected_rows(array $selectedrowkeys, string $format): export_result {
         global $DB;
+
+        $result = new export_result();
+        $result->zipfilename = clean_filename(format_string($this->parentreport->name) . '_chainexport.zip');
 
         $validation = definition::validate_element($this->parentreport, $this->chainelement);
         if (!$validation->valid) {
@@ -163,8 +166,22 @@ class runner {
         $rownum = 0;
         foreach ($rowindexes as $rowindex) {
             $rownum++;
+            $keyvalues = definition::extract_row_key_values($table, $rowindex, $this->formdata->rowkeycolumns);
+            $rowlabel = implode(' / ', array_filter($keyvalues));
+            if ($rowlabel === '') {
+                $rowlabel = get_string('chainexportrownumber', 'block_configurable_reports', $rownum);
+            }
+
             $filterparams = definition::build_filter_params_for_row($table, $rowindex, $this->formdata);
             $childfinal = $this->execute_child_report($childreport, $filterparams);
+
+            if (!definition::finalreport_has_data($childfinal)) {
+                $result->skipped[] = (object) [
+                    'label' => $rowlabel,
+                    'reason' => get_string('chainexportskippednodata', 'block_configurable_reports'),
+                ];
+                continue;
+            }
 
             $placeholders = [];
             foreach ($this->formdata->rowkeycolumns as $i => $column) {
@@ -174,10 +191,34 @@ class runner {
             $placeholders['row'] = (string) $rownum;
 
             $filename = definition::build_filename($childreport, $this->formdata, $placeholders, $format);
-            $files[] = $exporter->export_child_report_to_tempfile($childfinal, $format, $filename);
+            try {
+                $temppath = $exporter->export_child_report_to_tempfile($childfinal, $format, $filename);
+            } catch (\moodle_exception $e) {
+                if ($e->errorcode === 'chainerror_exportempty') {
+                    $result->skipped[] = (object) [
+                        'label' => $rowlabel,
+                        'reason' => get_string('chainexportskippednodata', 'block_configurable_reports'),
+                    ];
+                    continue;
+                }
+                throw $e;
+            }
+
+            $files[] = [
+                'name' => $filename,
+                'path' => $temppath,
+            ];
+            $result->exported[] = (object) [
+                'label' => $rowlabel,
+                'filename' => $filename,
+            ];
         }
 
-        return $exporter->create_zip_archive($files, clean_filename(format_string($this->parentreport->name) . '_chainexport.zip'));
+        if (!empty($files)) {
+            $result->zippath = $exporter->create_zip_archive($files, $result->zipfilename);
+        }
+
+        return $result;
     }
 
     /**

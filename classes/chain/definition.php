@@ -385,7 +385,7 @@ class definition {
 
         $extensions = [
             'csv' => 'csv',
-            'xls' => 'xls',
+            'xls' => 'xlsx',
             'ods' => 'ods',
             'slk' => 'slk',
             'json' => 'json',
@@ -397,6 +397,19 @@ class definition {
         }
 
         return $filename;
+    }
+
+    /**
+     * Whether a generated child report contains data rows to export.
+     *
+     * @param object $finalreport
+     * @return bool
+     */
+    public static function finalreport_has_data(object $finalreport): bool {
+        if (empty($finalreport->table)) {
+            return false;
+        }
+        return !empty($finalreport->table->data);
     }
 
     /**

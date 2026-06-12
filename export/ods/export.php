@@ -48,18 +48,29 @@ function export_report($report) {
  */
 function export_report_to_path($report, ?string $filepath, ?string $downloadfilename = null): void {
     global $CFG;
-    require_once($CFG->dirroot . '/lib/odslib.class.php');
 
     $matrix = report_matrix::from_finalreport($report);
-    $target = $filepath ?? '-';
-    $downloadfilename = $downloadfilename ?? ((format_string($report->name) ?? 'report') . time() . '.ods');
+    $sheetname = format_string($report->name) ?? 'report';
+    $sheetname = \core_text::substr($sheetname, 0, 31);
 
-    $workbook = new MoodleODSWorkbook($target);
-    if ($filepath === null) {
-        $workbook->send($downloadfilename);
+    if ($filepath !== null) {
+        require_once($CFG->dirroot . '/lib/odslib.class.php');
+        $workbook = new \block_configurable_reports\export\ods_file_workbook('-');
+        $myxls = $workbook->add_worksheet($sheetname);
+        foreach ($matrix as $ri => $col) {
+            foreach ($col as $ci => $cv) {
+                $myxls->write_string($ri, $ci, $cv);
+            }
+        }
+        $workbook->save_to_path($filepath);
+        return;
     }
 
-    $sheetname = format_string($report->name) ?? 'report';
+    require_once($CFG->dirroot . '/lib/odslib.class.php');
+    $downloadfilename = $downloadfilename ?? ((format_string($report->name) ?? 'report') . time() . '.ods');
+
+    $workbook = new MoodleODSWorkbook('-');
+    $workbook->send($downloadfilename);
     $myxls = $workbook->add_worksheet($sheetname);
 
     foreach ($matrix as $ri => $col) {
