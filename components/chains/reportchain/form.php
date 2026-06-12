@@ -46,6 +46,14 @@ class reportchain_form extends moodleform {
 
         $mform->addElement('header', 'crformheader', get_string('reportchain', 'block_configurable_reports'));
 
+        $mform->addElement('text', 'chainname', get_string('chainname', 'block_configurable_reports'), ['size' => 60]);
+        $mform->setType('chainname', PARAM_TEXT);
+        $mform->addHelpButton('chainname', 'chainname', 'block_configurable_reports');
+        $mform->addRule('chainname', null, 'required', null, 'client');
+
+        $mform->addElement('advcheckbox', 'enabled', '', get_string('chainenabled', 'block_configurable_reports'));
+        $mform->setDefault('enabled', 1);
+
         $reports = $pluginclass->get_available_child_reports();
         $reportoptions = [0 => get_string('choose')];
         foreach ($reports as $report) {
@@ -69,14 +77,6 @@ class reportchain_form extends moodleform {
             $this->add_action_buttons(false);
             return;
         }
-
-        $mform->addElement('advcheckbox', 'enabled', '', get_string('chainenabled', 'block_configurable_reports'));
-        $mform->setDefault('enabled', 1);
-
-        $mform->addElement('text', 'chainname', get_string('chainname', 'block_configurable_reports'), ['size' => 60]);
-        $mform->setType('chainname', PARAM_TEXT);
-        $mform->addHelpButton('chainname', 'chainname', 'block_configurable_reports');
-        $mform->addRule('chainname', null, 'required', null, 'client');
 
         $mform->addElement('text', 'filenamepattern', get_string('chainfilenamepattern', 'block_configurable_reports'),
             ['size' => 60]);
