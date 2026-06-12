@@ -204,7 +204,18 @@ if ($elements) {
                 '</a>';
         }
 
-        $rowdata = ['c' . ($i + 1), $e['pluginfullname'], $e['summary']];
+        $namecell = $e['pluginfullname'];
+        if ($comp === 'chains') {
+            $chainchild = null;
+            $chainform = (object) ($e['formdata'] ?? new stdClass());
+            if (!empty($chainform->childreportid)) {
+                $chainchild = $DB->get_record('block_configurable_reports', ['id' => (int) $chainform->childreportid],
+                    'id,name', IGNORE_MISSING);
+            }
+            $namecell = \block_configurable_reports\chain\definition::get_chain_display_name($e, $chainchild ?: null);
+        }
+
+        $rowdata = ['c' . ($i + 1), $namecell, $e['summary']];
         if ($filteranalysis !== null) {
             $usagecell = \block_configurable_reports\filter_sql_analyzer::format_notfound_html();
             if (isset($filteranalysis->filterrows[$idx])) {

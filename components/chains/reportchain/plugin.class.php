@@ -55,7 +55,16 @@ class plugin_reportchain extends plugin_base {
             return get_string('reportchain_summary_missing', 'block_configurable_reports');
         }
 
-        return get_string('reportchain_summary', 'block_configurable_reports', format_string($child->name));
+        $childname = format_string($child->name);
+        if ($data->chainname !== '') {
+            $a = (object) [
+                'chain' => format_string($data->chainname),
+                'child' => $childname,
+            ];
+            return get_string('reportchain_summary_named', 'block_configurable_reports', $a);
+        }
+
+        return get_string('reportchain_summary', 'block_configurable_reports', $childname);
     }
 
     /**

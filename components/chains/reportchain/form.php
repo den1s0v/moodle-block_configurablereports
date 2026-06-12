@@ -73,6 +73,11 @@ class reportchain_form extends moodleform {
         $mform->addElement('advcheckbox', 'enabled', '', get_string('chainenabled', 'block_configurable_reports'));
         $mform->setDefault('enabled', 1);
 
+        $mform->addElement('text', 'chainname', get_string('chainname', 'block_configurable_reports'), ['size' => 60]);
+        $mform->setType('chainname', PARAM_TEXT);
+        $mform->addHelpButton('chainname', 'chainname', 'block_configurable_reports');
+        $mform->addRule('chainname', null, 'required', null, 'client');
+
         $mform->addElement('text', 'filenamepattern', get_string('chainfilenamepattern', 'block_configurable_reports'),
             ['size' => 60]);
         $mform->setType('filenamepattern', PARAM_RAW);
@@ -130,6 +135,10 @@ class reportchain_form extends moodleform {
         if (empty($data['childreportid'])) {
             $errors['childreportid'] = get_string('chainerror_nochild', 'block_configurable_reports');
             return $errors;
+        }
+
+        if (empty(trim((string) ($data['chainname'] ?? '')))) {
+            $errors['chainname'] = get_string('chainerror_noname', 'block_configurable_reports');
         }
 
         if (empty(trim((string) ($data['rowkeycolumns'] ?? '')))) {

@@ -132,28 +132,42 @@ if ($chainid) {
     }
     $form->set_data($defaultdata);
 
+    $viewreportparams = array_merge(['id' => $id, 'courseid' => $courseid], $filterparams);
+    $viewreporturl = new moodle_url('/blocks/configurable_reports/viewreport.php', $viewreportparams);
+
     echo $OUTPUT->header();
     echo $OUTPUT->heading($pagetitle);
+    echo html_writer::div(
+        html_writer::link($viewreporturl, get_string('chainexportviewreport', 'block_configurable_reports')),
+        'mb-3'
+    );
     echo html_writer::tag('p', get_string('chainexportintro', 'block_configurable_reports'));
     if (empty($rows)) {
         echo $OUTPUT->notification(get_string('norecordsfound', 'block_configurable_reports'), 'info');
     } else {
         $form->display();
     }
-    echo $OUTPUT->continue_button(new moodle_url('/blocks/configurable_reports/viewreport.php', ['id' => $id]));
+    echo $OUTPUT->continue_button($viewreporturl);
     echo $OUTPUT->footer();
     exit;
 }
 
+$viewreportparams = array_merge(['id' => $id, 'courseid' => $courseid], $filterparams);
+$viewreporturl = new moodle_url('/blocks/configurable_reports/viewreport.php', $viewreportparams);
+
 echo $OUTPUT->header();
 echo $OUTPUT->heading($pagetitle);
 echo html_writer::tag('p', get_string('chainexportchoose', 'block_configurable_reports'));
+echo html_writer::div(
+    html_writer::link($viewreporturl, get_string('chainexportviewreport', 'block_configurable_reports')),
+    'mb-3'
+);
 
 echo html_writer::start_tag('ul', ['class' => 'chainexportlist']);
 foreach ($activechains as $chainelement) {
     $formdata = definition::normalise_formdata((object) ($chainelement['formdata'] ?? new stdClass()));
     $child = $DB->get_record('block_configurable_reports', ['id' => (int) $formdata->childreportid], 'id,name', IGNORE_MISSING);
-    $label = $child ? format_string($child->name) : get_string('reportchain_summary_missing', 'block_configurable_reports');
+    $label = definition::get_chain_list_label($chainelement, $child ?: null);
     $url = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
         'id' => $id,
         'chainid' => $chainelement['id'],
@@ -163,5 +177,5 @@ foreach ($activechains as $chainelement) {
 }
 echo html_writer::end_tag('ul');
 
-echo $OUTPUT->continue_button(new moodle_url('/blocks/configurable_reports/viewreport.php', ['id' => $id]));
+echo $OUTPUT->continue_button($viewreporturl);
 echo $OUTPUT->footer();

@@ -129,7 +129,64 @@ class definition {
             $normalised->enabled = 1;
         }
 
+        $normalised->chainname = trim((string) ($normalised->chainname ?? ''));
+
         return $normalised;
+    }
+
+    /**
+     * Human-readable chain name for UI lists.
+     *
+     * @param array<string, mixed> $element
+     * @param object|null $childreport Optional preloaded child report record.
+     * @return string
+     */
+    public static function get_chain_display_name(array $element, ?object $childreport = null): string {
+        global $DB;
+
+        $formdata = self::normalise_formdata((object) ($element['formdata'] ?? new \stdClass()));
+        if ($formdata->chainname !== '') {
+            return format_string($formdata->chainname);
+        }
+
+        if ($childreport === null && !empty($formdata->childreportid)) {
+            $childreport = $DB->get_record('block_configurable_reports', ['id' => (int) $formdata->childreportid],
+                'id,name', IGNORE_MISSING);
+        }
+        if ($childreport) {
+            return format_string($childreport->name);
+        }
+
+        return get_string('reportchain', 'block_configurable_reports');
+    }
+
+    /**
+     * Label for chain selection lists: chain name and child report name.
+     *
+     * @param array<string, mixed> $element
+     * @param object|null $childreport
+     * @return string
+     */
+    public static function get_chain_list_label(array $element, ?object $childreport = null): string {
+        global $DB;
+
+        $formdata = self::normalise_formdata((object) ($element['formdata'] ?? new \stdClass()));
+        $chainname = self::get_chain_display_name($element, $childreport);
+
+        if ($childreport === null && !empty($formdata->childreportid)) {
+            $childreport = $DB->get_record('block_configurable_reports', ['id' => (int) $formdata->childreportid],
+                'id,name', IGNORE_MISSING);
+        }
+
+        $childname = $childreport
+            ? format_string($childreport->name)
+            : get_string('reportchain_summary_missing', 'block_configurable_reports');
+
+        $a = (object) [
+            'chain' => $chainname,
+            'child' => $childname,
+        ];
+        return get_string('chainexportlistlabel', 'block_configurable_reports', $a);
     }
 
     /**

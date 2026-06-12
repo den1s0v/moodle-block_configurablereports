@@ -56,7 +56,10 @@ class exporter {
         }
 
         foreach ($files as $filepath) {
-            $zip->add_file_from_path(basename($filepath), $filepath);
+            if (!$zip->add_file_from_pathname(basename($filepath), $filepath)) {
+                $zip->close();
+                throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
+            }
         }
         $zip->close();
 

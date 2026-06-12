@@ -170,6 +170,12 @@ if (isset($pluginclass->form) && $pluginclass->form) {
         if ($comp === 'filters') {
             $formdata = $pluginclass->prepare_filter_config_formdata($formdata);
         }
+        if ($comp === 'chains' && $pname === 'reportchain' && empty($formdata->chainname) && !empty($formdata->childreportid)) {
+            $child = $DB->get_record('block_configurable_reports', ['id' => (int) $formdata->childreportid], 'name', IGNORE_MISSING);
+            if ($child) {
+                $formdata->chainname = $child->name;
+            }
+        }
         $editform->set_data($formdata);
     } else {
         $prefill = new stdClass();
@@ -187,7 +193,12 @@ if (isset($pluginclass->form) && $pluginclass->form) {
         } else if ($comp === 'chains' && $pname === 'reportchain') {
             $prefillchild = optional_param('childreportid', 0, PARAM_INT);
             if ($prefillchild) {
-                $editform->set_data((object) ['childreportid' => $prefillchild]);
+                $prefill = (object) ['childreportid' => $prefillchild];
+                $child = $DB->get_record('block_configurable_reports', ['id' => $prefillchild], 'name', IGNORE_MISSING);
+                if ($child) {
+                    $prefill->chainname = $child->name;
+                }
+                $editform->set_data($prefill);
             }
         }
     }
