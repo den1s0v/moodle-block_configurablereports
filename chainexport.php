@@ -409,10 +409,9 @@ EOT
                     'sesskey' => sesskey(),
                 ], $filterparams));
                 echo html_writer::div(
-                    $OUTPUT->single_button(
+                    html_writer::link(
                         $downloadurl,
                         get_string('chainexportdownloadzip', 'block_configurable_reports'),
-                        'get',
                         ['class' => 'btn btn-primary']
                     ),
                     'mb-3 chainexport-downloadzip'
