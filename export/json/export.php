@@ -53,7 +53,11 @@ function export_report_to_path($report, ?string $filepath): void {
         $json[] = $jsonobject;
     }
 
-    $content = json_encode($json);
+    $jsonflags = 0;
+    if (get_config('block_configurable_reports', 'jsonunicode')) {
+        $jsonflags |= JSON_UNESCAPED_UNICODE;
+    }
+    $content = json_encode($json, $jsonflags);
     $reportname = format_string($report->name) ?? 'report';
     $downloadfilename = clean_filename($reportname . '_' . time() . '.json');
 
