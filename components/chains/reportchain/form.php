@@ -26,6 +26,34 @@ require_once($CFG->libdir . '/formslib.php');
 class reportchain_form extends moodleform {
 
     /**
+     * Submit button label: Save when editing an existing chain, Add when creating.
+     *
+     * @return string
+     */
+    protected function get_chain_submit_label(): string {
+        if (!empty($this->_customdata['submitlabel'])) {
+            return $this->_customdata['submitlabel'];
+        }
+        if (trim((string) ($this->_customdata['cid'] ?? '')) !== '') {
+            return get_string('filterconfig_save', 'block_configurable_reports');
+        }
+        if (optional_param('cid', '', PARAM_RAW) !== '') {
+            return get_string('filterconfig_save', 'block_configurable_reports');
+        }
+        return get_string('add', 'block_configurable_reports');
+    }
+
+    /**
+     * Moodle resets submit button text to «Add» after set_data; re-apply our caption.
+     *
+     * @return void
+     */
+    public function definition_after_data(): void {
+        parent::definition_after_data();
+        $this->_customdata['pluginclass']->filter_config_definition_after_data($this, $this->_form, $this->_customdata);
+    }
+
+    /**
      * Form definition.
      *
      * @return void
@@ -75,7 +103,7 @@ class reportchain_form extends moodleform {
 
         if (!$configready) {
             $mform->addElement('static', 'selectchildhint', '', get_string('chainselectchildhint', 'block_configurable_reports'));
-            $this->add_action_buttons(false);
+            $this->add_action_buttons(true, $this->get_chain_submit_label());
             return;
         }
 
@@ -114,8 +142,7 @@ class reportchain_form extends moodleform {
                 html_writer::link($addurl, get_string('chainaddmapping', 'block_configurable_reports')));
         }
 
-        $submitlabel = $this->_customdata['submitlabel'] ?? get_string('add', 'block_configurable_reports');
-        $this->add_action_buttons(true, $submitlabel);
+        $this->add_action_buttons(true, $this->get_chain_submit_label());
     }
 
     /**

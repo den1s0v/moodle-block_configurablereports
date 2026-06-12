@@ -160,8 +160,9 @@ if (isset($pluginclass->form) && $pluginclass->form) {
     }
     $formurl = new moodle_url('/blocks/configurable_reports/editplugin.php', $formurlparams);
     $formcustomdata = compact('comp', 'cid', 'id', 'pluginclass', 'compclass', 'report', 'reportclass');
+    $formcustomdata['isediting'] = !empty($cdata);
     if ($comp === 'chains' && $pname === 'reportchain') {
-        $formcustomdata['submitlabel'] = ($cid !== '')
+        $formcustomdata['submitlabel'] = !empty($cdata)
             ? get_string('filterconfig_save', 'block_configurable_reports')
             : get_string('add', 'block_configurable_reports');
         if (!empty($cdata)) {
@@ -176,8 +177,8 @@ if (isset($pluginclass->form) && $pluginclass->form) {
             ? $requestedmappingcount
             : ($formcustomdata['initialmappingcount'] ?? 1);
         $formcustomdata['formbaseurl'] = $formurl->out(false);
-    } else {
-        $formcustomdata['submitlabel'] = ($cid !== '')
+    } else if ($comp === 'filters') {
+        $formcustomdata['submitlabel'] = !empty($cdata)
             ? get_string('filterconfig_save', 'block_configurable_reports')
             : get_string('add', 'block_configurable_reports');
     }
