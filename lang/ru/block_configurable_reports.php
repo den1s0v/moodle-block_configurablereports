@@ -120,6 +120,7 @@ $string['chainerror_nozip'] = 'Архив экспорта больше недо
 $string['chainerror_exportempty'] = 'Сформированный файл экспорта пустой.';
 $string['chainexportselectall'] = 'Выбрать или снять все строки';
 $string['chainexportnorowsselected'] = 'Выберите хотя бы одну строку для экспорта.';
+$string['chainexportvalidationfailed'] = 'Экспорт не запущен. Исправьте ошибки в форме ниже.';
 $string['chainexportsummaryrow'] = 'Строка';
 $string['chainexportsummaryfile'] = 'Файл';
 $string['chainexportsummaryreason'] = 'Причина';

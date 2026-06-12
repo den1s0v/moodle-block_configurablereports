@@ -681,6 +681,7 @@ $string['chainerror_nozip'] = 'The export archive is no longer available. Please
 $string['chainerror_exportempty'] = 'The generated export file is empty.';
 $string['chainexportselectall'] = 'Select or deselect all rows';
 $string['chainexportnorowsselected'] = 'Select at least one row to export.';
+$string['chainexportvalidationfailed'] = 'The export could not be started. Please correct the errors below.';
 $string['chainexportsummaryrow'] = 'Row';
 $string['chainexportsummaryfile'] = 'File';
 $string['chainexportsummaryreason'] = 'Reason';

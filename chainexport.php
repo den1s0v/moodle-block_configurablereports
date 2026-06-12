@@ -234,6 +234,11 @@ if ($chainid) {
     $rows = $runnerinstance->get_parent_row_descriptors();
     $head = $runnerinstance->get_parent_table_head();
 
+    $selectedrowkeys = null;
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $selectedrowkeys = chain_export_form::extract_selected_rowkeys_from_submission();
+    }
+
     $formparams = array_merge([
         'id' => $id,
         'chainid' => $chainid,
@@ -251,15 +256,21 @@ if ($chainid) {
         'head' => $head,
         'formats' => $formats,
         'filterparams' => $filterparams,
+        'selectedrowkeys' => $selectedrowkeys,
     ]);
 
-    if ($data = $form->get_data()) {
+    if ($form->is_cancelled()) {
+        redirect($chainlisturl);
+    }
+
+    if ($form->is_submitted() && $form->is_validated()) {
+        $data = $form->get_data();
         core_php_time_limit::raise();
         raise_memory_limit(MEMORY_EXTRA);
 
         block_configurable_reports_chainexport_discard_session_zip();
 
-        $selectedrowkeys = chain_export_form::extract_selected_rowkeys($data);
+        $selectedrowkeys = chain_export_form::extract_selected_rowkeys_from_submission();
         $exportresult = $runnerinstance->export_selected_rows($selectedrowkeys, $data->exportformat);
 
         if ($exportresult->has_exports()) {
@@ -294,28 +305,43 @@ if ($chainid) {
     }
 
     $defaultdata = new stdClass();
-    foreach ($rows as $row) {
-        $field = 'rowkey_' . $row->rowkey;
-        $defaultdata->{$field} = 1;
-    }
-    if ($exportformat !== '' && isset($formats[$exportformat])) {
+    if ($form->is_submitted()) {
+        $submitted = $form->get_submitted_data();
+        if (!empty($submitted->exportformat)) {
+            $defaultdata->exportformat = $submitted->exportformat;
+        }
+    } else if ($exportformat !== '' && isset($formats[$exportformat])) {
         $defaultdata->exportformat = $exportformat;
     } else if (!empty($formats)) {
         $defaultdata->exportformat = array_key_first($formats);
     }
     $form->set_data($defaultdata);
 
-    $PAGE->requires->js_amd_inline(<<<'EOT'
+    $norowsmessage = json_encode(get_string('chainexportnorowsselected', 'block_configurable_reports'));
+    $PAGE->requires->js_amd_inline(<<<EOT
 require(['jquery'], function($) {
     var selectall = $('#chainexport-selectall');
     var rowboxes = $('.chainexport-rowcb');
+    var norowsmessage = {$norowsmessage};
+
+    function syncSelectAll() {
+        var allchecked = rowboxes.length > 0 && rowboxes.filter(':checked').length === rowboxes.length;
+        selectall.prop('checked', allchecked);
+    }
+
     selectall.on('change', function() {
         rowboxes.prop('checked', selectall.prop('checked'));
     });
-    rowboxes.on('change', function() {
-        var allchecked = rowboxes.length > 0 && rowboxes.filter(':checked').length === rowboxes.length;
-        selectall.prop('checked', allchecked);
+    rowboxes.on('change', syncSelectAll);
+    syncSelectAll();
+
+    $('#mform1').on('submit', function(e) {
+        if (rowboxes.length > 0 && rowboxes.filter(':checked').length === 0) {
+            e.preventDefault();
+            window.alert(norowsmessage);
+        }
     });
+
     $('#id_exportformat').on('change', function() {
         var url = new URL(window.location.href);
         url.searchParams.set('exportformat', $(this).val());
@@ -371,6 +397,9 @@ EOT
     }
 
     echo html_writer::tag('p', get_string('chainexportintro', 'block_configurable_reports'));
+    if ($form->is_submitted() && !$form->is_validated()) {
+        echo $OUTPUT->notification(get_string('chainexportvalidationfailed', 'block_configurable_reports'), 'notifyerror');
+    }
     if (empty($rows)) {
         echo $OUTPUT->notification(get_string('norecordsfound', 'block_configurable_reports'), 'info');
     } else {

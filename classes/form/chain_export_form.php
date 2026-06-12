@@ -60,13 +60,18 @@ class chain_export_form extends \moodleform {
 
         $mform->addElement('header', 'chainexportheader', get_string('chainexportselectrows', 'block_configurable_reports'));
 
+        if (!empty($custom['rows'])) {
+            $mform->addElement('html', self::render_rows_table(
+                $custom['head'] ?? [],
+                $custom['rows'],
+                $custom['selectedrowkeys'] ?? null
+            ));
+            $mform->addElement('static', 'rowselection', '', '');
+        }
+
         $mform->addElement('select', 'exportformat', get_string('chainexportformat', 'block_configurable_reports'),
             $custom['formats']);
         $mform->addRule('exportformat', null, 'required', null, 'client');
-
-        if (!empty($custom['rows'])) {
-            $mform->addElement('html', self::render_rows_table($custom['head'] ?? [], $custom['rows']));
-        }
 
         $this->add_action_buttons(false, get_string('chainexportdownload', 'block_configurable_reports'));
     }
@@ -78,32 +83,39 @@ class chain_export_form extends \moodleform {
      * @param array<int, object> $rows
      * @return string
      */
-    public static function render_rows_table(array $head, array $rows): string {
+    public static function render_rows_table(array $head, array $rows, ?array $selectedrowkeys = null): string {
         $table = new \html_table();
         $table->attributes['class'] = 'generaltable chainexport-rowtable';
         $table->id = 'chainexport-rowtable';
 
-        $selectall = \html_writer::empty_tag('input', [
+        $allselected = ($selectedrowkeys === null);
+        $selectallattrs = [
             'type' => 'checkbox',
             'id' => 'chainexport-selectall',
-            'checked' => 'checked',
             'title' => get_string('chainexportselectall', 'block_configurable_reports'),
-        ]);
-        $headercells = [$selectall];
+        ];
+        if ($allselected) {
+            $selectallattrs['checked'] = 'checked';
+        }
+        $headercells = [\html_writer::empty_tag('input', $selectallattrs)];
         foreach ($head as $heading) {
             $headercells[] = $heading;
         }
         $table->head = $headercells;
 
         foreach ($rows as $row) {
+            $checked = $allselected || in_array($row->rowkey, $selectedrowkeys, true);
+            $checkboxattrs = [
+                'type' => 'checkbox',
+                'name' => 'rowkey_' . $row->rowkey,
+                'value' => '1',
+                'class' => 'chainexport-rowcb',
+            ];
+            if ($checked) {
+                $checkboxattrs['checked'] = 'checked';
+            }
             $cells = [
-                \html_writer::empty_tag('input', [
-                    'type' => 'checkbox',
-                    'name' => 'rowkey_' . $row->rowkey,
-                    'value' => '1',
-                    'class' => 'chainexport-rowcb',
-                    'checked' => 'checked',
-                ]),
+                \html_writer::empty_tag('input', $checkboxattrs),
             ];
             foreach ($row->cells as $cell) {
                 $cells[] = s(report_matrix::cell_to_plain_text($cell));
@@ -123,19 +135,41 @@ class chain_export_form extends \moodleform {
      */
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
-        if (empty(self::extract_selected_rowkeys((object) $data))) {
-            $errors['chainexportheader'] = get_string('chainexportnorowsselected', 'block_configurable_reports');
+        if (empty(self::extract_selected_rowkeys_from_submission())) {
+            $errors['rowselection'] = get_string('chainexportnorowsselected', 'block_configurable_reports');
         }
         return $errors;
     }
 
     /**
-     * Extract selected row keys from submitted data.
+     * Extract selected row keys from the raw POST request.
+     *
+     * Row checkboxes are rendered inside an HTML table and are not moodleform elements.
+     *
+     * @return array<int, string>
+     */
+    public static function extract_selected_rowkeys_from_submission(): array {
+        $selected = [];
+        foreach ($_POST as $key => $value) {
+            if (strpos($key, 'rowkey_') === 0 && !empty($value)) {
+                $selected[] = substr($key, strlen('rowkey_'));
+            }
+        }
+        return $selected;
+    }
+
+    /**
+     * Extract selected row keys from submitted form data.
      *
      * @param object $data
      * @return array<int, string>
      */
     public static function extract_selected_rowkeys(object $data): array {
+        $frompost = self::extract_selected_rowkeys_from_submission();
+        if (!empty($frompost)) {
+            return $frompost;
+        }
+
         $selected = [];
         foreach ((array) $data as $key => $value) {
             if (strpos($key, 'rowkey_') === 0 && !empty($value)) {
