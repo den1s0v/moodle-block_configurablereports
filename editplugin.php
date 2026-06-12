@@ -147,9 +147,22 @@ if (isset($pluginclass->form) && $pluginclass->form) {
     }
     $formurl = new moodle_url('/blocks/configurable_reports/editplugin.php', $formurlparams);
     $formcustomdata = compact('comp', 'cid', 'id', 'pluginclass', 'compclass', 'report', 'reportclass');
-    $formcustomdata['submitlabel'] = ($cid !== '')
-        ? get_string('filterconfig_save', 'block_configurable_reports')
-        : get_string('add', 'block_configurable_reports');
+    if ($comp === 'chains' && $pname === 'reportchain') {
+        $formcustomdata['submitlabel'] = ($cid !== '')
+            ? get_string('chainconfig_update', 'block_configurable_reports')
+            : get_string('add', 'block_configurable_reports');
+        if (!empty($cdata)) {
+            $storedform = (object) ($cdata['formdata'] ?? new stdClass());
+            if (!empty($storedform->childreportid)) {
+                $formcustomdata['storedchildreportid'] = (int) $storedform->childreportid;
+            }
+            $formcustomdata['initialmappingcount'] = max(1, count($storedform->mappings ?? []));
+        }
+    } else {
+        $formcustomdata['submitlabel'] = ($cid !== '')
+            ? get_string('filterconfig_save', 'block_configurable_reports')
+            : get_string('add', 'block_configurable_reports');
+    }
     $editform = new $classname($formurl, $formcustomdata);
 
     if (!empty($cdata)) {
@@ -171,6 +184,11 @@ if (isset($pluginclass->form) && $pluginclass->form) {
         }
         if (!empty((array) $prefill)) {
             $editform->set_data($prefill);
+        } else if ($comp === 'chains' && $pname === 'reportchain') {
+            $prefillchild = optional_param('childreportid', 0, PARAM_INT);
+            if ($prefillchild) {
+                $editform->set_data((object) ['childreportid' => $prefillchild]);
+            }
         }
     }
 

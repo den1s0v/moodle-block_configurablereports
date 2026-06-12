@@ -14,16 +14,31 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Configurable Reports a Moodle block for creating customizable reports
- *
- * @copyright  2020 Juan Leyva <juan@moodle.com>
- * @package    block_configurable_reports
- * @author     Juan leyva <http://www.twitter.com/jleyvadelgado>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 use block_configurable_reports\export\report_matrix;
+
+/**
+ * Resolve configured CSV delimiter character.
+ *
+ * @return string
+ */
+function block_configurable_reports_get_csv_delimiter_char(): string {
+    global $CFG;
+
+    $delimiter = get_config('block_configurable_reports', 'csvdelimiter');
+    switch ($delimiter) {
+        case 'colon':
+            return ':';
+        case 'semicolon':
+            return ';';
+        case 'tab':
+            return "\t";
+        case 'cfg':
+            return $CFG->CSV_DELIMITER ?? ',';
+        case 'comma':
+        default:
+            return ',';
+    }
+}
 
 /**
  * export_report
@@ -45,16 +60,11 @@ function export_report($report) {
  */
 function export_report_to_path($report, ?string $filepath): void {
     global $CFG;
-    require_once($CFG->libdir . '/csvlib.class.php');
 
     $matrix = report_matrix::from_finalreport($report);
-    $filename = format_string($report->name) ?? 'report';
-    $csvdelimiter = get_config('block_configurable_reports', 'csvdelimiter');
-    $csvexport = new csv_export_writer("$csvdelimiter", '"', 'application/download', true);
-    $csvexport->set_filename($filename);
-    $delimiter = $csvexport->delimiter ?? ',';
 
     if ($filepath !== null) {
+        $delimiter = block_configurable_reports_get_csv_delimiter_char();
         $handle = fopen($filepath, 'w');
         if ($handle === false) {
             throw new moodle_exception('chainerror_exportformat', 'block_configurable_reports');
@@ -65,6 +75,12 @@ function export_report_to_path($report, ?string $filepath): void {
         fclose($handle);
         return;
     }
+
+    require_once($CFG->libdir . '/csvlib.class.php');
+    $csvdelimiter = get_config('block_configurable_reports', 'csvdelimiter');
+    $filename = format_string($report->name) ?? 'report';
+    $csvexport = new csv_export_writer("$csvdelimiter", '"', 'application/download', true);
+    $csvexport->set_filename($filename);
 
     foreach ($matrix as $row) {
         $csvexport->add_data($row);
