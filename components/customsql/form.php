@@ -39,12 +39,37 @@ class customsql_form extends moodleform {
     // See http://moodle.org/mod/data/view.php?d=13&rid=2884.
 
     /**
+     * Refresh output column diagnostic after form data is loaded.
+     *
+     * @return void
+     */
+    public function definition_after_data(): void {
+        parent::definition_after_data();
+
+        $mform = $this->_form;
+        if (!$mform->elementExists('outputcolumnsdiagnostic')) {
+            return;
+        }
+
+        $compclass = $this->_customdata['compclass'] ?? null;
+        if (!$compclass || !method_exists($compclass, 'get_output_columns_diagnostic_html')) {
+            return;
+        }
+
+        $element = $mform->getElement('outputcolumnsdiagnostic');
+        $element->setText($compclass->get_output_columns_diagnostic_html());
+    }
+
+    /**
      * Form definition
      */
     public function definition(): void {
         global $COURSE;
 
         $mform =& $this->_form;
+
+        $mform->addElement('static', 'outputcolumnsdiagnostic', get_string('sqloutputcolumns_heading', 'block_configurable_reports'),
+            get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports'));
 
         $mform->addElement('textarea', 'querysql', get_string('querysql', 'block_configurable_reports'), 'rows="35" cols="80"');
         $mform->addRule('querysql', get_string('required'), 'required', null, 'client');

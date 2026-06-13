@@ -640,6 +640,15 @@ $string['emptyfilter_defaultvalue_hint'] = 'Sample for users or a limit on first
 $string['emptyfilter_defaultvalue_placeholder'] = 'e.g. Smith or course idnumber';
 
 $string['chains'] = 'Chains';
+$string['sqloutputcolumns_heading'] = 'Output columns (for chains)';
+$string['sqloutputcolumns_status_yes'] = 'Columns detected.';
+$string['sqloutputcolumns_status_no'] = 'Columns not detected.';
+$string['sqloutputcolumns_list'] = 'List: {$a}';
+$string['sqloutputcolumns_updated'] = 'Cached on last save: {$a}';
+$string['sqloutputcolumns_not_saved_yet'] = 'Save the query to cache the column list.';
+$string['sqloutputcolumns_reason_no_rows'] = 'The query returned no rows when detecting columns.';
+$string['sqloutputcolumns_reason_no_rows_empty'] = 'The query returned no rows — the table is empty or the WHERE clause excludes all data.';
+$string['sqloutputcolumns_reason_error'] = 'An error occurred while running the query for column detection.';
 $string['nochainsyet'] = 'No report chains configured yet';
 $string['reportchain'] = 'Report chain';
 $string['chainname'] = 'Chain name';

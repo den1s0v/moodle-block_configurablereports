@@ -61,7 +61,10 @@ class component_customsql extends component_base {
             $data = $cform->get_data();
             require_once($CFG->dirroot . '/blocks/configurable_reports/reports/sql/report.class.php');
             $reportclass = new report_sql($this->config->id);
-            $data->outputcolumns = $reportclass->extract_output_column_names($data->querysql);
+            $extraction = $reportclass->extract_output_columns_result($data->querysql);
+            $data->outputcolumns = $extraction->columns;
+            $data->outputcolumns_detected = !empty($extraction->detected) ? 1 : 0;
+            $data->outputcolumns_reason = $extraction->reason;
             $data->outputcolumns_updated = time();
             // Function cr_serialize() will add slashes.
             $components = cr_unserialize($this->config->components);
@@ -83,6 +86,15 @@ class component_customsql extends component_base {
             $sqlconfig = $components['customsql']['config'] ?? new stdclass;
             $cform->set_data($sqlconfig);
         }
+    }
+
+    /**
+     * HTML diagnostic for cached SQL output columns.
+     *
+     * @return string
+     */
+    public function get_output_columns_diagnostic_html(): string {
+        return \block_configurable_reports\report\output_columns::format_sql_save_diagnostic($this->config);
     }
 
 }

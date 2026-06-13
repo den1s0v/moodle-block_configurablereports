@@ -91,4 +91,71 @@ class output_columns {
     public static function is_known_column(object $report, string $name): bool {
         return in_array(trim($name), self::get_column_names($report), true);
     }
+
+    /**
+     * Read SQL column extraction metadata from report config.
+     *
+     * @param object $report
+     * @return \stdClass
+     */
+    public static function get_sql_column_metadata(object $report): \stdClass {
+        $meta = (object) [
+            'columns' => self::get_column_names($report),
+            'detected' => false,
+            'reason' => '',
+            'updated' => 0,
+        ];
+
+        if (($report->type ?? '') !== 'sql') {
+            return $meta;
+        }
+
+        $components = cr_unserialize($report->components ?? '');
+        $config = $components['customsql']['config'] ?? new \stdClass();
+
+        if (!empty($config->outputcolumns_detected)) {
+            $meta->detected = true;
+        } else if (!empty($meta->columns)) {
+            $meta->detected = true;
+        }
+
+        $meta->reason = (string) ($config->outputcolumns_reason ?? '');
+        $meta->updated = (int) ($config->outputcolumns_updated ?? 0);
+
+        return $meta;
+    }
+
+    /**
+     * Diagnostic HTML for the custom SQL save page.
+     *
+     * @param object $report
+     * @return string
+     */
+    public static function format_sql_save_diagnostic(object $report): string {
+        $meta = self::get_sql_column_metadata($report);
+
+        $lines = [];
+        if ($meta->detected && !empty($meta->columns)) {
+            $lines[] = get_string('sqloutputcolumns_status_yes', 'block_configurable_reports');
+            $lines[] = get_string('sqloutputcolumns_list', 'block_configurable_reports',
+                implode(', ', array_map('s', $meta->columns)));
+        } else {
+            $lines[] = get_string('sqloutputcolumns_status_no', 'block_configurable_reports');
+            $reasonkey = 'sqloutputcolumns_reason_' . ($meta->reason ?: 'no_rows');
+            if (get_string_manager()->string_exists($reasonkey, 'block_configurable_reports')) {
+                $lines[] = get_string($reasonkey, 'block_configurable_reports');
+            } else {
+                $lines[] = get_string('sqloutputcolumns_reason_no_rows', 'block_configurable_reports');
+            }
+        }
+
+        if ($meta->updated > 0) {
+            $lines[] = get_string('sqloutputcolumns_updated', 'block_configurable_reports',
+                userdate($meta->updated));
+        } else {
+            $lines[] = get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports');
+        }
+
+        return \html_writer::alist($lines, null, 'ul');
+    }
 }

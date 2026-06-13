@@ -79,6 +79,15 @@ $string['emptyfilter_defaultvalue_hint'] = 'Образец для пользов
 $string['emptyfilter_defaultvalue_placeholder'] = 'напр. Иванов или idnumber курса';
 
 $string['chains'] = 'Цепочки';
+$string['sqloutputcolumns_heading'] = 'Выходные колонки (для цепочек)';
+$string['sqloutputcolumns_status_yes'] = 'Колонки определены.';
+$string['sqloutputcolumns_status_no'] = 'Колонки не определены.';
+$string['sqloutputcolumns_list'] = 'Список: {$a}';
+$string['sqloutputcolumns_updated'] = 'Зафиксировано при последнем сохранении: {$a}';
+$string['sqloutputcolumns_not_saved_yet'] = 'Сохраните запрос, чтобы зафиксировать список колонок.';
+$string['sqloutputcolumns_reason_no_rows'] = 'Запрос не вернул ни одной строки при определении колонок.';
+$string['sqloutputcolumns_reason_no_rows_empty'] = 'Запрос не вернул ни одной строки — таблица пуста или условие WHERE исключает все данные.';
+$string['sqloutputcolumns_reason_error'] = 'Ошибка при выполнении запроса для определения колонок.';
 $string['nochainsyet'] = 'Цепочки отчётов ещё не настроены';
 $string['reportchain'] = 'Цепочка отчётов';
 $string['chainname'] = 'Имя цепочки';

@@ -68,6 +68,51 @@ class output_columns_test extends \advanced_testcase {
     }
 
     /**
+     * Diagnostic HTML should list detected columns.
+     */
+    public function test_format_sql_save_diagnostic_detected(): void {
+        $report = (object) [
+            'type' => 'sql',
+            'components' => cr_serialize([
+                'customsql' => [
+                    'config' => (object) [
+                        'outputcolumns' => ['courseid', 'name'],
+                        'outputcolumns_detected' => 1,
+                        'outputcolumns_reason' => 'ok',
+                        'outputcolumns_updated' => 1700000000,
+                    ],
+                ],
+            ]),
+        ];
+
+        $html = output_columns::format_sql_save_diagnostic($report);
+        $this->assertStringContainsString('courseid', $html);
+        $this->assertStringContainsString('name', $html);
+    }
+
+    /**
+     * Diagnostic HTML should explain when columns were not detected.
+     */
+    public function test_format_sql_save_diagnostic_not_detected(): void {
+        $report = (object) [
+            'type' => 'sql',
+            'components' => cr_serialize([
+                'customsql' => [
+                    'config' => (object) [
+                        'outputcolumns' => [],
+                        'outputcolumns_detected' => 0,
+                        'outputcolumns_reason' => 'no_rows_empty',
+                        'outputcolumns_updated' => 1700000000,
+                    ],
+                ],
+            ]),
+        ];
+
+        $html = output_columns::format_sql_save_diagnostic($report);
+        $this->assertStringNotContainsString('courseid', $html);
+    }
+
+    /**
      * Record keys should be extracted in order without duplicates.
      */
     public function test_column_names_from_record(): void {

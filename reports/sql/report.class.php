@@ -94,6 +94,10 @@ class report_sql extends report_base {
             return $rawsql;
         }
 
+        if ($mode === BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_COLUMN_METADATA) {
+            return $this->prepare_sql($rawsql, ['columnextract' => true]);
+        }
+
         $this->filterexecmode = $mode;
         $sql = $rawsql;
 
@@ -203,6 +207,7 @@ class report_sql extends report_base {
         global $USER, $CFG, $COURSE;
 
         $restrictive = !empty($options['restrictive']);
+        $columnextract = !empty($options['columnextract']);
 
         // Enable debug mode from SQL query.
         $this->config->debug = strpos($sql, '%%DEBUG%%') !== false;
@@ -215,7 +220,7 @@ class report_sql extends report_base {
             $sql = str_replace('%%FILTER_VAR%%', $filtervar, $sql);
         }
 
-        $starttime = $restrictive ? '0' : '0';
+        $starttime = '0';
         $endtime = $restrictive ? '0' : '2145938400';
 
         // See http://en.wikipedia.org/wiki/Year_2038_problem.
@@ -232,6 +237,8 @@ class report_sql extends report_base {
 
         if ($restrictive) {
             $sql = preg_replace('/%%FILTER_[^%]+%%/i', ' AND 1=0 ', $sql);
+        } else if ($columnextract) {
+            $sql = preg_replace('/%%FILTER_[^%]+%%/i', ' ', $sql);
         }
 
         $sql = preg_replace('/%{2}[^%]+%{2}/i', '', $sql);
@@ -386,16 +393,33 @@ class report_sql extends report_base {
     /**
      * Extract output column names from a SQL query (first result row keys).
      *
-     * Uses restrictive filter mode and at most one row, matching validate_query_sql.
-     *
      * @param string $rawsql
      * @return array<int, string>
      */
     public function extract_output_column_names(string $rawsql): array {
+        return $this->extract_output_columns_result($rawsql)->columns;
+    }
+
+    /**
+     * Extract output column metadata with detection status for diagnostics.
+     *
+     * Filter placeholders are neutralized (not restrictive AND 1=0) so column
+     * names can be read even when the report uses %%FILTER_*%% tokens.
+     *
+     * @param string $rawsql
+     * @return \stdClass columns, detected, reason
+     */
+    public function extract_output_columns_result(string $rawsql): \stdClass {
+        $result = (object) [
+            'columns' => [],
+            'detected' => false,
+            'reason' => 'no_rows',
+        ];
+
         core_php_time_limit::raise(60);
 
         try {
-            $sql = $this->build_sql_from_config($rawsql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE);
+            $sql = $this->build_sql_from_config($rawsql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_COLUMN_METADATA);
             $sql = $this->normalize_sql_prefixes($sql);
 
             $rs = $this->execute_query($sql, [
@@ -404,7 +428,8 @@ class report_sql extends report_base {
                 'prefixes_normalized' => true,
             ]);
             if (!$rs) {
-                return [];
+                $result->reason = $this->guess_column_extraction_failure_reason($rawsql);
+                return $result;
             }
 
             $columns = [];
@@ -413,10 +438,33 @@ class report_sql extends report_base {
                 break;
             }
             $rs->close();
-            return $columns;
+
+            if (!empty($columns)) {
+                $result->columns = $columns;
+                $result->detected = true;
+                $result->reason = 'ok';
+                return $result;
+            }
+
+            $result->reason = $this->guess_column_extraction_failure_reason($rawsql);
         } catch (Throwable $e) {
-            return [];
+            $result->reason = 'error';
         }
+
+        return $result;
+    }
+
+    /**
+     * Guess why column extraction returned no names.
+     *
+     * @param string $rawsql
+     * @return string Reason code: no_rows, no_rows_empty, error.
+     */
+    protected function guess_column_extraction_failure_reason(string $rawsql): string {
+        if (!preg_match('/%%FILTER_[^%]+%%/i', $rawsql)) {
+            return 'no_rows_empty';
+        }
+        return 'no_rows';
     }
 
     /**
