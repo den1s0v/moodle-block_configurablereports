@@ -384,6 +384,56 @@ class report_sql extends report_base {
     }
 
     /**
+     * Extract output column names from a SQL query (first result row keys).
+     *
+     * Uses restrictive filter mode and at most one row, matching validate_query_sql.
+     *
+     * @param string $rawsql
+     * @return array<int, string>
+     */
+    public function extract_output_column_names(string $rawsql): array {
+        core_php_time_limit::raise(60);
+
+        try {
+            $sql = $this->build_sql_from_config($rawsql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE);
+            $sql = $this->normalize_sql_prefixes($sql);
+
+            $rs = $this->execute_query($sql, [
+                'validation' => true,
+                'maxrows' => 1,
+                'prefixes_normalized' => true,
+            ]);
+            if (!$rs) {
+                return [];
+            }
+
+            $columns = [];
+            foreach ($rs as $row) {
+                $columns = self::column_names_from_record($row);
+                break;
+            }
+            $rs->close();
+            return $columns;
+        } catch (Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Column names from a single database record (object or array).
+     *
+     * @param object|array $row
+     * @return array<int, string>
+     */
+    public static function column_names_from_record($row): array {
+        if (!is_object($row) && !is_array($row)) {
+            return [];
+        }
+        $names = array_keys((array) $row);
+        return array_values(array_unique(array_map('strval', $names)));
+    }
+
+    /**
      * create_report
      *
      * @return bool

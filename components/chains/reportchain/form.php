@@ -18,6 +18,8 @@ defined('MOODLE_INTERNAL') || die;
 
 require_once($CFG->libdir . '/formslib.php');
 
+use block_configurable_reports\report\output_columns;
+
 /**
  * Report chain configuration form.
  *
@@ -46,6 +48,7 @@ class reportchain_form extends moodleform {
         $mform = $this->_form;
         $pluginclass = $this->_customdata['pluginclass'];
         $cid = $this->_customdata['cid'] ?? '';
+        $sourcereport = $this->_customdata['report'];
 
         $childreportid = optional_param('childreportid', 0, PARAM_INT);
         if (!$childreportid && !empty($this->_customdata['storedchildreportid'])) {
@@ -53,6 +56,8 @@ class reportchain_form extends moodleform {
         }
 
         $configready = $childreportid > 0;
+        $sourcecolumnoptions = output_columns::get_select_options($sourcereport);
+        $hascolumnmetadata = !empty($sourcecolumnoptions);
 
         $mform->addElement('header', 'crformheader', get_string('reportchain', 'block_configurable_reports'));
 
@@ -95,11 +100,27 @@ class reportchain_form extends moodleform {
         $mform->setDefault('filenamepattern', '##reportname##_##row##');
         $mform->addHelpButton('filenamepattern', 'chainfilenamepattern', 'block_configurable_reports');
 
-        $mform->addElement('text', 'rowkeycolumns', get_string('chainrowkeycolumns', 'block_configurable_reports'),
-            ['size' => 60]);
-        $mform->setType('rowkeycolumns', PARAM_RAW);
-        $mform->addHelpButton('rowkeycolumns', 'chainrowkeycolumns', 'block_configurable_reports');
-        $mform->addRule('rowkeycolumns', null, 'required', null, 'client');
+        if ($hascolumnmetadata) {
+            $rowkeysize = min(10, max(3, count($sourcecolumnoptions)));
+            $mform->addElement('select', 'rowkeycolumns', get_string('chainrowkeycolumns', 'block_configurable_reports'),
+                $sourcecolumnoptions, ['multiple' => 'multiple', 'size' => $rowkeysize]);
+            $mform->setType('rowkeycolumns', PARAM_RAW);
+            $mform->addHelpButton('rowkeycolumns', 'chainrowkeycolumns', 'block_configurable_reports');
+            $mform->addRule('rowkeycolumns', null, 'required', null, 'client');
+        } else {
+            if (($sourcereport->type ?? '') === 'sql') {
+                $mform->addElement('static', 'nocolumnsmetadata', '',
+                    get_string('chainresavesqlforcolumns', 'block_configurable_reports'));
+            } else {
+                $mform->addElement('static', 'nocolumnsmetadata', '',
+                    get_string('chainnocolumnsmetadata', 'block_configurable_reports'));
+            }
+            $mform->addElement('text', 'rowkeycolumns', get_string('chainrowkeycolumns', 'block_configurable_reports'),
+                ['size' => 60]);
+            $mform->setType('rowkeycolumns', PARAM_RAW);
+            $mform->addHelpButton('rowkeycolumns', 'chainrowkeycolumns', 'block_configurable_reports');
+            $mform->addRule('rowkeycolumns', null, 'required', null, 'client');
+        }
 
         $filteroptions = $pluginclass->get_child_filter_options($childreportid);
         if (empty($filteroptions)) {
@@ -113,7 +134,7 @@ class reportchain_form extends moodleform {
                 get_string('chainmappingcolumnsheader', 'block_configurable_reports'),
                 'chain-mapping-columns-header fw-bold mb-2'
             ));
-        $this->add_mapping_groups($mform, $mappingcount, $filteroptions);
+        $this->add_mapping_groups($mform, $mappingcount, $filteroptions, $sourcecolumnoptions);
 
         $mform->addElement('hidden', 'mappingcount', $mappingcount);
         $mform->setType('mappingcount', PARAM_INT);
@@ -133,14 +154,19 @@ class reportchain_form extends moodleform {
      * @param MoodleQuickForm $mform
      * @param int $mappingcount
      * @param array<string, string> $filteroptions
+     * @param array<string, string> $sourcecolumnoptions
      * @return void
      */
-    protected function add_mapping_groups($mform, int $mappingcount, array $filteroptions): void {
+    protected function add_mapping_groups($mform, int $mappingcount, array $filteroptions, array $sourcecolumnoptions = []): void {
         for ($i = 0; $i < $mappingcount; $i++) {
             $sourcefield = 'sourcecolumn' . $i;
             $targetfield = 'targetfilter' . $i;
             $groupelements = [];
-            $groupelements[] = $mform->createElement('text', $sourcefield, '', ['size' => 30]);
+            if (!empty($sourcecolumnoptions)) {
+                $groupelements[] = $mform->createElement('select', $sourcefield, '', $sourcecolumnoptions);
+            } else {
+                $groupelements[] = $mform->createElement('text', $sourcefield, '', ['size' => 30]);
+            }
             if (!empty($filteroptions)) {
                 $groupelements[] = $mform->createElement('select', $targetfield, '', $filteroptions);
             } else {
@@ -178,7 +204,22 @@ class reportchain_form extends moodleform {
             $errors['chainname'] = get_string('chainerror_noname', 'block_configurable_reports');
         }
 
-        if (empty(trim((string) ($data['rowkeycolumns'] ?? '')))) {
+        $sourcereport = $this->_customdata['report'];
+        $hascolumnmetadata = output_columns::has_metadata($sourcereport);
+
+        if ($hascolumnmetadata) {
+            $rowkeys = $this->normalise_rowkey_submission($data['rowkeycolumns'] ?? null);
+            if (empty($rowkeys)) {
+                $errors['rowkeycolumns'] = get_string('chainerror_norowkeys', 'block_configurable_reports');
+            } else {
+                foreach ($rowkeys as $column) {
+                    if (!output_columns::is_known_column($sourcereport, $column)) {
+                        $errors['rowkeycolumns'] = get_string('chainerror_unknowncolumn', 'block_configurable_reports', $column);
+                        break;
+                    }
+                }
+            }
+        } else if (empty(trim((string) ($data['rowkeycolumns'] ?? '')))) {
             $errors['rowkeycolumns'] = get_string('chainerror_norowkeys', 'block_configurable_reports');
         }
 
@@ -189,19 +230,38 @@ class reportchain_form extends moodleform {
             $target = $this->read_mapping_field((object) $data, 'targetfilter', $i);
             if ($source !== '' && $target !== '') {
                 $hasmapping = true;
-                break;
+                if ($hascolumnmetadata && !output_columns::is_known_column($sourcereport, $source)) {
+                    $errors['mappinggroup' . $i] = get_string('chainerror_unknowncolumn', 'block_configurable_reports', $source);
+                }
             }
         }
         if (!$hasmapping) {
             $errors['mappinggroup0'] = get_string('chainerror_nomappings', 'block_configurable_reports');
         }
 
-        $sourcereport = $this->_customdata['report'];
         if ((int) $data['childreportid'] === (int) $sourcereport->id) {
             $errors['childreportid'] = get_string('chainerror_selfreference', 'block_configurable_reports');
         }
 
         return $errors;
+    }
+
+    /**
+     * Normalise row key columns from form submission (multiselect or text).
+     *
+     * @param mixed $rowkeys
+     * @return array<int, string>
+     */
+    protected function normalise_rowkey_submission($rowkeys): array {
+        if (is_array($rowkeys)) {
+            return array_values(array_filter(array_map(function($value) {
+                return trim((string) $value);
+            }, $rowkeys)));
+        }
+        if (is_string($rowkeys) && trim($rowkeys) !== '') {
+            return array_values(array_filter(array_map('trim', explode(',', $rowkeys))));
+        }
+        return [];
     }
 
     /**
@@ -256,7 +316,9 @@ class reportchain_form extends moodleform {
             $data->mappingcount = max((int) ($data->mappingcount ?? 1), (int) $this->_customdata['mappingcount']);
         }
         if (!empty($data->rowkeycolumns) && is_array($data->rowkeycolumns)) {
-            $data->rowkeycolumns = implode(', ', $data->rowkeycolumns);
+            if (!output_columns::has_metadata($this->_customdata['report'])) {
+                $data->rowkeycolumns = implode(', ', $data->rowkeycolumns);
+            }
         }
         parent::set_data($data);
     }
@@ -270,6 +332,9 @@ class reportchain_form extends moodleform {
     public function prepare_mapping_data(object $data): object {
         if (!isset($data->enabled)) {
             $data->enabled = 0;
+        }
+        if (isset($data->rowkeycolumns)) {
+            $data->rowkeycolumns = $this->normalise_rowkey_submission($data->rowkeycolumns);
         }
         $mappings = [];
         $mappingcount = max(1, (int) ($data->mappingcount ?? 1));

@@ -56,9 +56,13 @@ class component_customsql extends component_base {
      * @return void
      */
     public function form_process_data(moodleform $cform): void {
-        global $DB;
+        global $DB, $CFG;
         if ($this->form) {
             $data = $cform->get_data();
+            require_once($CFG->dirroot . '/blocks/configurable_reports/reports/sql/report.class.php');
+            $reportclass = new report_sql($this->config->id);
+            $data->outputcolumns = $reportclass->extract_output_column_names($data->querysql);
+            $data->outputcolumns_updated = time();
             // Function cr_serialize() will add slashes.
             $components = cr_unserialize($this->config->components);
             $components['customsql']['config'] = $data;

@@ -236,6 +236,11 @@ class definition {
             return self::result(false, get_string('chainerror_norowkeys', 'block_configurable_reports'));
         }
 
+        $columncheck = self::validate_source_columns($parentreport, $formdata);
+        if (!$columncheck->valid) {
+            return $columncheck;
+        }
+
         // Depth-2 only: child must not define its own active chains pointing back.
         if (self::child_references_parent($child, (int) $parentreport->id)) {
             return self::result(false, get_string('chainerror_cycle', 'block_configurable_reports'));
@@ -243,6 +248,35 @@ class definition {
 
         if (empty(self::get_allowed_export_formats($child))) {
             return self::result(false, get_string('chainerror_noexport', 'block_configurable_reports'));
+        }
+
+        return self::result(true);
+    }
+
+    /**
+     * Validate chain column names against cached SQL output metadata.
+     *
+     * @param object $parentreport
+     * @param object $formdata Normalised chain form data.
+     * @return \stdClass
+     */
+    public static function validate_source_columns(object $parentreport, object $formdata): \stdClass {
+        $metadata = \block_configurable_reports\report\output_columns::get_column_names($parentreport);
+        if (empty($metadata)) {
+            return self::result(true);
+        }
+
+        foreach ($formdata->rowkeycolumns as $column) {
+            if (!in_array($column, $metadata, true)) {
+                return self::result(false, get_string('chainerror_unknowncolumn', 'block_configurable_reports', $column));
+            }
+        }
+
+        foreach ($formdata->mappings as $mapping) {
+            $source = trim((string) ($mapping->sourcecolumn ?? ''));
+            if ($source !== '' && !in_array($source, $metadata, true)) {
+                return self::result(false, get_string('chainerror_unknowncolumn', 'block_configurable_reports', $source));
+            }
         }
 
         return self::result(true);

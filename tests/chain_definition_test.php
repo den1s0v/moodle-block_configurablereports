@@ -86,4 +86,28 @@ class chain_definition_test extends \advanced_testcase {
         $params = definition::build_filter_params_for_row($table, 0, $formdata);
         $this->assertSame('42', $params['filter_searchtext']);
     }
+
+    /**
+     * Unknown source columns should fail validation when SQL metadata is present.
+     */
+    public function test_validate_source_columns_rejects_unknown_column(): void {
+        $parent = (object) [
+            'id' => 5,
+            'type' => 'sql',
+            'components' => cr_serialize([
+                'customsql' => [
+                    'config' => (object) [
+                        'outputcolumns' => ['groupid', 'groupname'],
+                    ],
+                ],
+            ]),
+        ];
+        $formdata = definition::normalise_formdata((object) [
+            'rowkeycolumns' => ['groupid'],
+            'mappings' => [(object) ['sourcecolumn' => 'unknown_col', 'targetfilter' => 'filter_searchtext']],
+        ]);
+
+        $result = definition::validate_source_columns($parent, $formdata);
+        $this->assertFalse($result->valid);
+    }
 }
