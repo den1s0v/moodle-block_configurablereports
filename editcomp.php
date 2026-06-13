@@ -269,53 +269,53 @@ if ($elements) {
         $i++;
     }
     cr_print_table($table);
-
-    if ($filteranalysis !== null) {
-        if (!empty($filteranalysis->notices)) {
-            foreach ($filteranalysis->notices as $noticekey) {
-                echo $OUTPUT->notification(get_string($noticekey, 'block_configurable_reports'), 'info');
-            }
-        }
-        if (!empty($filteranalysis->missing)) {
-            echo $OUTPUT->heading(get_string('filtersql_missing_heading', 'block_configurable_reports'), 4);
-            $missingtable = new html_table();
-            $missingtable->head = [
-                get_string('filtersql_placeholder', 'block_configurable_reports'),
-                get_string('filtersql_detail', 'block_configurable_reports'),
-                get_string('edit'),
-            ];
-            foreach ($filteranalysis->missing as $missing) {
-                $addlinks = [];
-                foreach ($missing->suggestedplugins as $splugin) {
-                    $params = [
-                        'id' => $id,
-                        'comp' => $comp,
-                        'pname' => $splugin,
-                    ];
-                    if (!empty($missing->prefill->idnumber)) {
-                        $params['prefill_idnumber'] = $missing->prefill->idnumber;
-                    }
-                    if (!empty($missing->prefill->field)) {
-                        $params['prefill_field'] = $missing->prefill->field;
-                    }
-                    if (!empty($missing->prefill->label)) {
-                        $params['prefill_label'] = $missing->prefill->label;
-                    }
-                    $url = new moodle_url('/blocks/configurable_reports/editplugin.php', $params);
-                    $addlinks[] = html_writer::link($url, get_string('filtersql_addfilter', 'block_configurable_reports') .
-                        ' (' . get_string($splugin, 'block_configurable_reports') . ')');
-                }
-                $missingtable->data[] = [
-                    s($missing->placeholder),
-                    $missing->detail,
-                    implode('<br />', $addlinks),
-                ];
-            }
-            echo html_writer::table($missingtable);
-        }
-    }
 } else if ($compclass->plugins) {
     echo $OUTPUT->heading(get_string('no' . $comp . 'yet', 'block_configurable_reports'));
+}
+
+if ($filteranalysis !== null) {
+    if (!empty($filteranalysis->notices)) {
+        foreach ($filteranalysis->notices as $noticekey) {
+            echo $OUTPUT->notification(get_string($noticekey, 'block_configurable_reports'), 'info');
+        }
+    }
+    if (!empty($filteranalysis->missing)) {
+        echo $OUTPUT->heading(get_string('filtersql_missing_heading', 'block_configurable_reports'), 4);
+        $missingtable = new html_table();
+        $missingtable->head = [
+            get_string('filtersql_placeholder', 'block_configurable_reports'),
+            get_string('filtersql_detail', 'block_configurable_reports'),
+            get_string('edit'),
+        ];
+        foreach ($filteranalysis->missing as $missing) {
+            $addlinks = [];
+            foreach ($missing->suggestedplugins as $splugin) {
+                $params = [
+                    'id' => $id,
+                    'comp' => $comp,
+                    'pname' => $splugin,
+                ];
+                if (!empty($missing->prefill->idnumber)) {
+                    $params['prefill_idnumber'] = $missing->prefill->idnumber;
+                }
+                if (!empty($missing->prefill->field)) {
+                    $params['prefill_field'] = $missing->prefill->field;
+                }
+                if (!empty($missing->prefill->label)) {
+                    $params['prefill_label'] = $missing->prefill->label;
+                }
+                $url = new moodle_url('/blocks/configurable_reports/editplugin.php', $params);
+                $addlinks[] = html_writer::link($url, get_string('filtersql_addfilter', 'block_configurable_reports') .
+                    ' (' . get_string($splugin, 'block_configurable_reports') . ')');
+            }
+            $missingtable->data[] = [
+                s($missing->placeholder),
+                $missing->detail,
+                implode('<br />', $addlinks),
+            ];
+        }
+        echo html_writer::table($missingtable);
+    }
 }
 
 if ($compclass->plugins) {
