@@ -80,6 +80,8 @@ $string['emptyfilter_defaultvalue_placeholder'] = 'напр. Иванов или
 
 $string['chains'] = 'Цепочки';
 $string['sqloutputcolumns_heading'] = 'Колонки отчёта (определено по SQL-запросу)';
+$string['show_sql_outputcolumns_diagnostic'] = 'Показывать список колонок на странице SQL';
+$string['show_sql_outputcolumns_diagnostic_help'] = 'Если включено, под формой SQL-запроса отображается список колонок, определённых при сохранении. Метаданные колонок для цепочек отчётов по-прежнему сохраняются при сохранении запроса.';
 $string['sqloutputcolumns_status_yes'] = 'Колонки определены.';
 $string['sqloutputcolumns_status_no'] = 'Колонки не определены.';
 $string['sqloutputcolumns_list'] = 'Список: {$a}';

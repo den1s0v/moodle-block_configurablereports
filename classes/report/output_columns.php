@@ -128,6 +128,19 @@ class output_columns {
     }
 
     /**
+     * Whether the SQL save page should show the detected output columns panel.
+     *
+     * @return bool
+     */
+    public static function is_diagnostic_visible(): bool {
+        $value = get_config('block_configurable_reports', 'show_sql_outputcolumns_diagnostic');
+        if ($value === false) {
+            return true;
+        }
+        return (bool) $value;
+    }
+
+    /**
      * Build diagnostic HTML from probe/saved metadata.
      *
      * @param array<int, string> $columns

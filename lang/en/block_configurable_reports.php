@@ -641,6 +641,8 @@ $string['emptyfilter_defaultvalue_placeholder'] = 'e.g. Smith or course idnumber
 
 $string['chains'] = 'Chains';
 $string['sqloutputcolumns_heading'] = 'Report columns (detected from SQL query)';
+$string['show_sql_outputcolumns_diagnostic'] = 'Show SQL output columns on save page';
+$string['show_sql_outputcolumns_diagnostic_help'] = 'When enabled, the list of report columns detected from the SQL query is shown below the custom SQL form. Column metadata is still cached for report chains when the query is saved.';
 $string['sqloutputcolumns_status_yes'] = 'Columns detected.';
 $string['sqloutputcolumns_status_no'] = 'Columns not detected.';
 $string['sqloutputcolumns_list'] = 'List: {$a}';

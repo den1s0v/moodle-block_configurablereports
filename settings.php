@@ -97,6 +97,15 @@ if ($ADMIN->fulltree) {
         )
     );
 
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_configurable_reports/show_sql_outputcolumns_diagnostic',
+            get_string('show_sql_outputcolumns_diagnostic', 'block_configurable_reports'),
+            get_string('show_sql_outputcolumns_diagnostic_help', 'block_configurable_reports'),
+            1
+        )
+    );
+
     $reporttableoptions = ['html' => 'Simple', 'jquery' => 'jQuery', 'datatables' => 'DataTables JS'];
     $settings->add(
         new admin_setting_configselect(

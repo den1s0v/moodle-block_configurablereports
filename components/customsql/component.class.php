@@ -142,7 +142,11 @@ class component_customsql extends component_base {
      */
     public function print_output_columns_diagnostic(): void {
         global $OUTPUT;
-        
+
+        if (!\block_configurable_reports\report\output_columns::is_diagnostic_visible()) {
+            return;
+        }
+
         echo '<p>';
         echo $OUTPUT->heading(get_string('sqloutputcolumns_heading', 'block_configurable_reports'), 5);
         echo $OUTPUT->box(
