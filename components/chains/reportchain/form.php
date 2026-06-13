@@ -128,13 +128,16 @@ class reportchain_form extends moodleform {
         }
 
         $mappingcount = max(1, (int) ($this->_customdata['mappingcount'] ?? 1));
+        $chooseoption = ['' => get_string('choose')];
+        $mappingcolumnoptions = !empty($sourcecolumnoptions) ? ($chooseoption + $sourcecolumnoptions) : [];
+        $mappingfilteroptions = !empty($filteroptions) ? ($chooseoption + $filteroptions) : [];
 
         $mform->addElement('static', 'mappingcolumnsheader', '',
             html_writer::div(
                 get_string('chainmappingcolumnsheader', 'block_configurable_reports'),
                 'chain-mapping-columns-header fw-bold mb-2'
             ));
-        $this->add_mapping_groups($mform, $mappingcount, $filteroptions, $sourcecolumnoptions);
+        $this->add_mapping_groups($mform, $mappingcount, $mappingfilteroptions, $mappingcolumnoptions);
 
         $mform->addElement('hidden', 'mappingcount', $mappingcount);
         $mform->setType('mappingcount', PARAM_INT);
@@ -182,6 +185,17 @@ class reportchain_form extends moodleform {
             );
             $mform->setType($sourcefield, PARAM_RAW);
             $mform->setType($targetfield, PARAM_RAW);
+
+            if ($mappingcount > 1 && !empty($this->_customdata['formbaseurl'])) {
+                $removeurl = new moodle_url($this->_customdata['formbaseurl'], [
+                    'removemapping' => $i,
+                    'mappingcount' => $mappingcount,
+                    'sesskey' => sesskey(),
+                ]);
+                $mform->addElement('static', 'removemapping' . $i, '',
+                    html_writer::link($removeurl, get_string('chainremovemapping', 'block_configurable_reports'),
+                        ['class' => 'chain-remove-mapping small text-muted']));
+            }
         }
     }
 

@@ -680,6 +680,7 @@ $string['chaintargetfilter'] = 'Target report filter parameter';
 $string['chainmappingheader'] = 'Mapping {$a}';
 $string['chainmappingcolumnsheader'] = 'Source report column → Target report filter parameter';
 $string['chainaddmapping'] = 'Add mapping';
+$string['chainremovemapping'] = 'Remove mapping';
 $string['chainselectchildhint'] = 'Select a target report to configure mappings and export settings.';
 $string['chainnofilters'] = 'The selected target report has no filters configured.';
 $string['chainexport'] = 'Chain export';

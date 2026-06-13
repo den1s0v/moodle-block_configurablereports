@@ -119,6 +119,7 @@ $string['chaintargetfilter'] = 'Параметр фильтра целевого
 $string['chainmappingheader'] = 'Сопоставление {$a}';
 $string['chainmappingcolumnsheader'] = 'Колонка отчёта-источника → Параметр фильтра целевого отчёта';
 $string['chainaddmapping'] = 'Добавить сопоставление';
+$string['chainremovemapping'] = 'Удалить сопоставление';
 $string['chainselectchildhint'] = 'Выберите целевой отчёт, чтобы настроить сопоставления и параметры экспорта.';
 $string['chainnofilters'] = 'У выбранного целевого отчёта нет настроенных фильтров.';
 $string['chainexport'] = 'Экспорт по цепочке';
