@@ -57,7 +57,9 @@ class customsql_form extends moodleform {
         }
 
         $element = $mform->getElement('outputcolumnsdiagnostic');
-        $element->setText($compclass->get_output_columns_diagnostic_html());
+        if (is_object($element) && method_exists($element, 'setText')) {
+            $element->setText($compclass->get_output_columns_diagnostic_html());
+        }
     }
 
     /**

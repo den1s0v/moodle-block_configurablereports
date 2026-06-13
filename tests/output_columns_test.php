@@ -68,49 +68,30 @@ class output_columns_test extends \advanced_testcase {
     }
 
     /**
-     * Diagnostic HTML should list detected columns and metadata source.
+     * Diagnostic HTML should list detected columns without redundant status lines.
      */
     public function test_format_sql_save_diagnostic_detected(): void {
-        $report = (object) [
-            'type' => 'sql',
-            'components' => cr_serialize([
-                'customsql' => [
-                    'config' => (object) [
-                        'outputcolumns' => ['courseid', 'name'],
-                        'outputcolumns_detected' => 1,
-                        'outputcolumns_reason' => 'ok',
-                        'outputcolumns_source' => 'metadata',
-                        'outputcolumns_updated' => 1700000000,
-                    ],
-                ],
-            ]),
-        ];
+        $html = output_columns::format_diagnostic(
+            ['courseid', 'name'],
+            true,
+            'ok',
+            1700000000
+        );
 
-        $html = output_columns::format_sql_save_diagnostic($report);
         $this->assertStringContainsString('courseid', $html);
         $this->assertStringContainsString('name', $html);
+        $this->assertStringNotContainsString(
+            get_string('sqloutputcolumns_status_yes', 'block_configurable_reports'),
+            $html
+        );
     }
 
     /**
      * Diagnostic HTML should explain when columns were not detected.
      */
     public function test_format_sql_save_diagnostic_not_detected(): void {
-        $report = (object) [
-            'type' => 'sql',
-            'components' => cr_serialize([
-                'customsql' => [
-                    'config' => (object) [
-                        'outputcolumns' => [],
-                        'outputcolumns_detected' => 0,
-                        'outputcolumns_reason' => 'metadata_unavailable',
-                        'outputcolumns_source' => 'none',
-                        'outputcolumns_updated' => 1700000000,
-                    ],
-                ],
-            ]),
-        ];
+        $html = output_columns::format_diagnostic([], false, 'metadata_unavailable', 1700000000);
 
-        $html = output_columns::format_sql_save_diagnostic($report);
         $this->assertStringNotContainsString('courseid', $html);
     }
 

@@ -128,6 +128,40 @@ class output_columns {
     }
 
     /**
+     * Build diagnostic HTML from probe/saved metadata.
+     *
+     * @param array<int, string> $columns
+     * @param bool $detected
+     * @param string $reason
+     * @param int $updated Unix timestamp of last save.
+     * @return string
+     */
+    public static function format_diagnostic(array $columns, bool $detected, string $reason, int $updated): string {
+        $lines = [];
+        if ($detected && !empty($columns)) {
+            $lines[] = get_string('sqloutputcolumns_list', 'block_configurable_reports',
+                implode(', ', array_map('s', $columns)));
+        } else {
+            $lines[] = get_string('sqloutputcolumns_status_no', 'block_configurable_reports');
+            if ($reason !== '' && $reason !== 'ok') {
+                $reasonkey = 'sqloutputcolumns_reason_' . $reason;
+                if (get_string_manager()->string_exists($reasonkey, 'block_configurable_reports')) {
+                    $lines[] = get_string($reasonkey, 'block_configurable_reports');
+                }
+            }
+        }
+
+        if ($updated > 0) {
+            $lines[] = get_string('sqloutputcolumns_updated', 'block_configurable_reports',
+                userdate($updated));
+        } else {
+            $lines[] = get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports');
+        }
+
+        return \html_writer::alist($lines, null, 'ul');
+    }
+
+    /**
      * Diagnostic HTML for the custom SQL save page.
      *
      * @param object $report
@@ -136,33 +170,11 @@ class output_columns {
     public static function format_sql_save_diagnostic(object $report): string {
         $meta = self::get_sql_column_metadata($report);
 
-        $lines = [];
-        if ($meta->detected && !empty($meta->columns)) {
-            $lines[] = get_string('sqloutputcolumns_status_yes', 'block_configurable_reports');
-            $lines[] = get_string('sqloutputcolumns_list', 'block_configurable_reports',
-                implode(', ', array_map('s', $meta->columns)));
-            if ($meta->source === 'metadata') {
-                $lines[] = get_string('sqloutputcolumns_source_metadata', 'block_configurable_reports');
-            } else if ($meta->source === 'first_row') {
-                $lines[] = get_string('sqloutputcolumns_source_firstrow', 'block_configurable_reports');
-            }
-        } else {
-            $lines[] = get_string('sqloutputcolumns_status_no', 'block_configurable_reports');
-            $reasonkey = 'sqloutputcolumns_reason_' . ($meta->reason ?: 'metadata_unavailable');
-            if (get_string_manager()->string_exists($reasonkey, 'block_configurable_reports')) {
-                $lines[] = get_string($reasonkey, 'block_configurable_reports');
-            } else {
-                $lines[] = get_string('sqloutputcolumns_reason_metadata_unavailable', 'block_configurable_reports');
-            }
-        }
-
-        if ($meta->updated > 0) {
-            $lines[] = get_string('sqloutputcolumns_updated', 'block_configurable_reports',
-                userdate($meta->updated));
-        } else {
-            $lines[] = get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports');
-        }
-
-        return \html_writer::alist($lines, null, 'ul');
+        return self::format_diagnostic(
+            $meta->columns,
+            $meta->detected,
+            $meta->reason,
+            $meta->updated
+        );
     }
 }

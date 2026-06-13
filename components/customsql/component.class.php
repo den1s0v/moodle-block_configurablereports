@@ -50,6 +50,13 @@ class component_customsql extends component_base {
     }
 
     /**
+     * Fresh diagnostic HTML built during the current save request.
+     *
+     * @var string|null
+     */
+    private ?string $outputcolumnsdiagnostichtml = null;
+
+    /**
      * form_process_data
      *
      * @param moodleform $cform
@@ -69,6 +76,12 @@ class component_customsql extends component_base {
             $data->outputcolumns_reason = $extraction->reason;
             $data->outputcolumns_source = $extraction->columns_source ?? 'none';
             $data->outputcolumns_updated = time();
+            $this->outputcolumnsdiagnostichtml = \block_configurable_reports\report\output_columns::format_diagnostic(
+                $extraction->columns,
+                !empty($extraction->detected),
+                (string) ($extraction->reason ?? ''),
+                (int) $data->outputcolumns_updated
+            );
             // Function cr_serialize() will add slashes.
             $components = cr_unserialize($this->config->components);
             $components['customsql']['config'] = $data;
@@ -97,6 +110,10 @@ class component_customsql extends component_base {
      * @return string
      */
     public function get_output_columns_diagnostic_html(): string {
+        if ($this->outputcolumnsdiagnostichtml !== null) {
+            return $this->outputcolumnsdiagnostichtml;
+        }
+
         return \block_configurable_reports\report\output_columns::format_sql_save_diagnostic($this->config);
     }
 

@@ -104,6 +104,7 @@ if ($compclass->form) {
         redirect($CFG->wwwroot . '/blocks/configurable_reports/editcomp.php?id=' . $id . '&amp;comp=' . $comp);
     } else if ($data = $editform->get_data()) {
         $compclass->form_process_data($editform);
+        $PAGE->set_cacheable(false);
     }
 
     $compclass->form_set_data($editform);
