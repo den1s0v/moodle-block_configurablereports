@@ -78,6 +78,8 @@ class output_columns_test extends \advanced_testcase {
             1700000000
         );
 
+        $this->assertStringContainsString('<ol', $html);
+        $this->assertStringContainsString('<li>', $html);
         $this->assertStringContainsString('courseid', $html);
         $this->assertStringContainsString('name', $html);
         $this->assertStringNotContainsString(

@@ -139,8 +139,11 @@ class output_columns {
     public static function format_diagnostic(array $columns, bool $detected, string $reason, int $updated): string {
         $lines = [];
         if ($detected && !empty($columns)) {
-            $lines[] = get_string('sqloutputcolumns_list', 'block_configurable_reports',
-                implode(', ', array_map('s', $columns)));
+            $items = [];
+            foreach ($columns as $column) {
+                $items[] = \html_writer::tag('li', s($column));
+            }
+            $lines[] = \html_writer::tag('ol', implode('', $items), ['class' => 'sql-outputcolumns-list']);
         } else {
             $lines[] = get_string('sqloutputcolumns_status_no', 'block_configurable_reports');
             if ($reason !== '' && $reason !== 'ok') {
