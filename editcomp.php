@@ -105,9 +105,13 @@ if ($compclass->form) {
     } else if ($data = $editform->get_data()) {
         $compclass->form_process_data($editform);
         $PAGE->set_cacheable(false);
+        $report = $DB->get_record('block_configurable_reports', ['id' => $id], '*', MUST_EXIST);
     }
 
     $compclass->form_set_data($editform);
+    if ($comp === 'customsql' && method_exists($editform, 'refresh_output_columns_diagnostic')) {
+        $editform->refresh_output_columns_diagnostic();
+    }
 }
 
 if ($compclass->plugins) {

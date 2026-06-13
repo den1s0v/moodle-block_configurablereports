@@ -82,6 +82,9 @@ class component_customsql extends component_base {
                 (string) ($extraction->reason ?? ''),
                 (int) $data->outputcolumns_updated
             );
+            if (method_exists($cform, 'refresh_output_columns_diagnostic')) {
+                $cform->refresh_output_columns_diagnostic();
+            }
             // Function cr_serialize() will add slashes.
             $components = cr_unserialize($this->config->components);
             $components['customsql']['config'] = $data;
