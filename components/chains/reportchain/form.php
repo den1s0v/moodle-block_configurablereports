@@ -61,15 +61,6 @@ class reportchain_form extends moodleform {
 
         $mform->addElement('header', 'crformheader', get_string('reportchain', 'block_configurable_reports'));
 
-        $mform->addElement('text', 'chainname', get_string('chainname', 'block_configurable_reports'), ['size' => 60]);
-        $mform->setType('chainname', PARAM_TEXT);
-        $mform->addHelpButton('chainname', 'chainname', 'block_configurable_reports');
-        $mform->addRule('chainname', null, 'required', null, 'client');
-
-        $mform->addElement('advcheckbox', 'enabled', '', get_string('chainenabled', 'block_configurable_reports'));
-        $mform->addHelpButton('enabled', 'chainenabled', 'block_configurable_reports');
-        $mform->setDefault('enabled', 1);
-
         $reports = $pluginclass->get_available_child_reports();
         $reportoptions = [0 => get_string('choose')];
         foreach ($reports as $report) {
@@ -81,7 +72,7 @@ class reportchain_form extends moodleform {
         if ($cid !== '') {
             $furl .= '&cid=' . urlencode($cid);
         }
-        $selectattrs = ['onchange' => 'location.href="' . $furl . '&childreportid="+document.getElementById("id_childreportid").value'];
+        $selectattrs = ['onchange' => $this->build_childreport_change_handler($furl)];
 
         $mform->addElement('select', 'childreportid', get_string('chainchildreport', 'block_configurable_reports'),
             $reportoptions, $selectattrs);
@@ -93,6 +84,15 @@ class reportchain_form extends moodleform {
             $pluginclass->add_filter_config_action_buttons($this, $this->_customdata);
             return;
         }
+
+        $mform->addElement('text', 'chainname', get_string('chainname', 'block_configurable_reports'), ['size' => 60]);
+        $mform->setType('chainname', PARAM_TEXT);
+        $mform->addHelpButton('chainname', 'chainname', 'block_configurable_reports');
+        $mform->addRule('chainname', null, 'required', null, 'client');
+
+        $mform->addElement('advcheckbox', 'enabled', '', get_string('chainenabled', 'block_configurable_reports'));
+        $mform->addHelpButton('enabled', 'chainenabled', 'block_configurable_reports');
+        $mform->setDefault('enabled', 1);
 
         $mform->addElement('text', 'filenamepattern', get_string('chainfilenamepattern', 'block_configurable_reports'),
             ['size' => 60]);
@@ -143,12 +143,63 @@ class reportchain_form extends moodleform {
         $mform->setType('mappingcount', PARAM_INT);
 
         if (!empty($this->_customdata['formbaseurl'])) {
-            $addurl = new moodle_url($this->_customdata['formbaseurl'], ['mappingcount' => $mappingcount + 1]);
+            $addurl = $this->append_chain_url_params(new moodle_url($this->_customdata['formbaseurl'], [
+                'mappingcount' => $mappingcount + 1,
+                'childreportid' => $childreportid,
+            ]));
             $mform->addElement('static', 'addmappinglink', '',
-                html_writer::link($addurl, get_string('chainaddmapping', 'block_configurable_reports')));
+                html_writer::link('#', get_string('chainaddmapping', 'block_configurable_reports'), [
+                    'onclick' => $this->build_chain_navigation_onclick($addurl->out(false)),
+                ]));
         }
 
         $pluginclass->add_filter_config_action_buttons($this, $this->_customdata);
+    }
+
+    /**
+     * JavaScript handler: reload with new child report and preserve draft fields.
+     *
+     * @param string $baseurl
+     * @return string
+     */
+    protected function build_childreport_change_handler(string $baseurl): string {
+        return "var u='" . $baseurl . "&childreportid='+this.value;" . $this->build_draft_append_js('u') . ";location.href=u";
+    }
+
+    /**
+     * Append current draft field values to a URL variable in JavaScript.
+     *
+     * @param string $urlvar
+     * @return string
+     */
+    protected function build_draft_append_js(string $urlvar = 'u'): string {
+        $script = "var n=document.getElementById('id_chainname');if(n&&n.value){" . $urlvar . "+='&draft_chainname='+encodeURIComponent(n.value)}";
+        $script .= ";var e=document.getElementById('id_enabled');if(e){" . $urlvar . "+='&draft_enabled='+(e.checked?1:0)}";
+        $script .= ";var f=document.getElementById('id_filenamepattern');if(f&&f.value){" . $urlvar . "+='&draft_filenamepattern='+encodeURIComponent(f.value)}";
+        return $script;
+    }
+
+    /**
+     * onclick handler for chain form links that must keep unsaved draft values.
+     *
+     * @param string $baseurl
+     * @return string
+     */
+    protected function build_chain_navigation_onclick(string $baseurl): string {
+        return "var u='" . $baseurl . "';" . $this->build_draft_append_js('u') . ";location.href=u;return false;";
+    }
+
+    /**
+     * Append child report id and draft query params to a form navigation URL.
+     *
+     * @param moodle_url $url
+     * @return moodle_url
+     */
+    protected function append_chain_url_params(moodle_url $url): moodle_url {
+        foreach ($this->_customdata['chaindraftparams'] ?? [] as $name => $value) {
+            $url->param($name, $value);
+        }
+        return $url;
     }
 
     /**
@@ -187,14 +238,17 @@ class reportchain_form extends moodleform {
             $mform->setType($targetfield, PARAM_RAW);
 
             if ($mappingcount > 1 && !empty($this->_customdata['formbaseurl'])) {
-                $removeurl = new moodle_url($this->_customdata['formbaseurl'], [
+                $removeurl = $this->append_chain_url_params(new moodle_url($this->_customdata['formbaseurl'], [
                     'removemapping' => $i,
                     'mappingcount' => $mappingcount,
+                    'childreportid' => (int) ($this->_customdata['storedchildreportid'] ?? optional_param('childreportid', 0, PARAM_INT)),
                     'sesskey' => sesskey(),
-                ]);
+                ]));
                 $mform->addElement('static', 'removemapping' . $i, '',
-                    html_writer::link($removeurl, get_string('chainremovemapping', 'block_configurable_reports'),
-                        ['class' => 'chain-remove-mapping small text-muted']));
+                    html_writer::link('#', get_string('chainremovemapping', 'block_configurable_reports'), [
+                        'class' => 'chain-remove-mapping small text-muted',
+                        'onclick' => $this->build_chain_navigation_onclick($removeurl->out(false)),
+                    ]));
             }
         }
     }

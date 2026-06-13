@@ -135,6 +135,78 @@ class definition {
     }
 
     /**
+     * Draft chain form values preserved across child-report reloads.
+     *
+     * @return \stdClass
+     */
+    public static function read_form_draft_from_request(): \stdClass {
+        $draft = new \stdClass();
+
+        if (optional_param('draft_chainname', null, PARAM_TEXT) !== null) {
+            $draft->chainname = optional_param('draft_chainname', '', PARAM_TEXT);
+        }
+        if (($enabled = optional_param('draft_enabled', -1, PARAM_INT)) >= 0) {
+            $draft->enabled = $enabled;
+        }
+        if (optional_param('draft_filenamepattern', null, PARAM_RAW) !== null) {
+            $draft->filenamepattern = optional_param('draft_filenamepattern', '', PARAM_RAW);
+        }
+
+        return $draft;
+    }
+
+    /**
+     * URL query parameters for chain form draft state.
+     *
+     * @return array<string, string|int>
+     */
+    public static function get_form_draft_url_params(): array {
+        $params = [];
+        $draft = self::read_form_draft_from_request();
+
+        if (property_exists($draft, 'chainname') && $draft->chainname !== '') {
+            $params['draft_chainname'] = $draft->chainname;
+        }
+        if (property_exists($draft, 'enabled')) {
+            $params['draft_enabled'] = (int) $draft->enabled;
+        }
+        if (property_exists($draft, 'filenamepattern') && $draft->filenamepattern !== '') {
+            $params['draft_filenamepattern'] = $draft->filenamepattern;
+        }
+
+        return $params;
+    }
+
+    /**
+     * Merge draft request values into form prefill data.
+     *
+     * @param object $prefill
+     * @param int $childreportid
+     * @return object
+     */
+    public static function apply_form_draft_to_prefill(object $prefill, int $childreportid): object {
+        global $DB;
+
+        $draft = self::read_form_draft_from_request();
+        if (property_exists($draft, 'chainname')) {
+            $prefill->chainname = $draft->chainname;
+        } else if (empty($prefill->chainname) && $childreportid > 0) {
+            $child = $DB->get_record('block_configurable_reports', ['id' => $childreportid], 'name', IGNORE_MISSING);
+            if ($child) {
+                $prefill->chainname = $child->name;
+            }
+        }
+        if (property_exists($draft, 'enabled')) {
+            $prefill->enabled = $draft->enabled;
+        }
+        if (property_exists($draft, 'filenamepattern')) {
+            $prefill->filenamepattern = $draft->filenamepattern;
+        }
+
+        return $prefill;
+    }
+
+    /**
      * Human-readable chain name for UI lists.
      *
      * @param array<string, mixed> $element

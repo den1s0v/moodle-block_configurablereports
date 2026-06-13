@@ -187,6 +187,11 @@ if ($comp === 'chains' && $pname === 'reportchain' && $removemapping >= 0 && $ci
     }
 
     $redirectparams = ['id' => $id, 'comp' => $comp, 'pname' => $pname, 'cid' => $cid];
+    $redirectparams = array_merge($redirectparams, \block_configurable_reports\chain\definition::get_form_draft_url_params());
+    $redirectchild = optional_param('childreportid', 0, PARAM_INT);
+    if ($redirectchild > 0) {
+        $redirectparams['childreportid'] = $redirectchild;
+    }
     if ($newmappingcount > 1 || !$saved) {
         $redirectparams['mappingcount'] = $newmappingcount;
     }
@@ -222,10 +227,15 @@ if (isset($pluginclass->form) && $pluginclass->form) {
             }
             $formcustomdata['initialmappingcount'] = max(1, count($storedform->mappings ?? []));
         }
+        $requestedchild = optional_param('childreportid', 0, PARAM_INT);
+        if ($requestedchild > 0) {
+            $formcustomdata['storedchildreportid'] = $requestedchild;
+        }
         $requestedmappingcount = optional_param('mappingcount', 0, PARAM_INT);
         $formcustomdata['mappingcount'] = $requestedmappingcount > 0
             ? $requestedmappingcount
             : ($formcustomdata['initialmappingcount'] ?? 1);
+        $formcustomdata['chaindraftparams'] = \block_configurable_reports\chain\definition::get_form_draft_url_params();
         $formcustomdata['formbaseurl'] = $formurl->out(false);
     }
     $editform = new $classname($formurl, $formcustomdata);
@@ -255,16 +265,26 @@ if (isset($pluginclass->form) && $pluginclass->form) {
         }
         if (!empty((array) $prefill)) {
             $editform->set_data($prefill);
-        } else if ($comp === 'chains' && $pname === 'reportchain') {
-            $prefillchild = optional_param('childreportid', 0, PARAM_INT);
-            if ($prefillchild) {
-                $prefill = (object) ['childreportid' => $prefillchild];
-                $child = $DB->get_record('block_configurable_reports', ['id' => $prefillchild], 'name', IGNORE_MISSING);
-                if ($child) {
-                    $prefill->chainname = $child->name;
-                }
-                $editform->set_data($prefill);
+        }
+    }
+
+    if ($comp === 'chains' && $pname === 'reportchain') {
+        $childreportid = optional_param('childreportid', 0, PARAM_INT);
+        if (!$childreportid && !empty($cdata['formdata']->childreportid)) {
+            $childreportid = (int) $cdata['formdata']->childreportid;
+        }
+        $draft = \block_configurable_reports\chain\definition::read_form_draft_from_request();
+        if (!empty((array) $draft)) {
+            if ($childreportid > 0) {
+                $draft->childreportid = $childreportid;
             }
+            $editform->set_data($draft);
+        } else if (empty($cdata) && $childreportid > 0) {
+            $prefill = \block_configurable_reports\chain\definition::apply_form_draft_to_prefill(
+                (object) ['childreportid' => $childreportid],
+                $childreportid
+            );
+            $editform->set_data($prefill);
         }
     }
 
