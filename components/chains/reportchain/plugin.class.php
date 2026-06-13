@@ -64,7 +64,7 @@ class plugin_reportchain extends plugin_base {
             if ($source === '' || $target === '') {
                 continue;
             }
-            $mappingparts[] = s($source) . ' ? ' . s($target);
+            $mappingparts[] = s($source) . ' → ' . s($target);
         }
 
         $a = (object) [
