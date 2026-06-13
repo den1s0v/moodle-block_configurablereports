@@ -292,6 +292,19 @@ if (isset($pluginclass->form) && $pluginclass->form) {
         redirect(new moodle_url('/blocks/configurable_reports/editcomp.php', ['id' => $id, 'comp' => $comp]));
         exit;
     } else if ($data = $editform->get_data()) {
+        if ($comp === 'chains' && $pname === 'reportchain' && !empty($data->configstep)) {
+            $redirectparams = [
+                'id' => $id,
+                'comp' => $comp,
+                'pname' => $pname,
+                'childreportid' => (int) $data->childreportid,
+            ];
+            if ($cid) {
+                $redirectparams['cid'] = $cid;
+            }
+            redirect(new moodle_url('/blocks/configurable_reports/editplugin.php', $redirectparams));
+            exit;
+        }
         if ($comp === 'chains' && $pname === 'reportchain' && method_exists($editform, 'prepare_mapping_data')) {
             $data = $editform->prepare_mapping_data($data);
             $data = \block_configurable_reports\chain\definition::normalise_formdata($data);

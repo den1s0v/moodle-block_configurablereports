@@ -34,7 +34,13 @@ class reportchain_form extends moodleform {
      */
     public function definition_after_data(): void {
         parent::definition_after_data();
-        $this->_customdata['pluginclass']->filter_config_definition_after_data($this, $this->_form, $this->_customdata);
+        $childreportid = optional_param('childreportid', 0, PARAM_INT);
+        if (!$childreportid && !empty($this->_customdata['storedchildreportid'])) {
+            $childreportid = (int) $this->_customdata['storedchildreportid'];
+        }
+        if ($childreportid > 0) {
+            $this->_customdata['pluginclass']->filter_config_definition_after_data($this, $this->_form, $this->_customdata);
+        }
     }
 
     /**
@@ -43,8 +49,6 @@ class reportchain_form extends moodleform {
      * @return void
      */
     public function definition(): void {
-        global $CFG;
-
         $mform = $this->_form;
         $pluginclass = $this->_customdata['pluginclass'];
         $cid = $this->_customdata['cid'] ?? '';
@@ -67,21 +71,20 @@ class reportchain_form extends moodleform {
             $reportoptions[$report->id] = format_string($report->name);
         }
 
-        $furl = $CFG->wwwroot . '/blocks/configurable_reports/editplugin.php?id=' . $this->_customdata['report']->id .
-            '&comp=chains&pname=reportchain';
-        if ($cid !== '') {
-            $furl .= '&cid=' . urlencode($cid);
-        }
-        $selectattrs = ['onchange' => $this->build_childreport_change_handler($furl)];
-
         $mform->addElement('select', 'childreportid', get_string('chainchildreport', 'block_configurable_reports'),
-            $reportoptions, $selectattrs);
+            $reportoptions);
         $mform->setDefault('childreportid', $childreportid);
         $mform->addRule('childreportid', null, 'required', null, 'client');
 
         if (!$configready) {
             $mform->addElement('static', 'selectchildhint', '', get_string('chainselectchildhint', 'block_configurable_reports'));
-            $pluginclass->add_filter_config_action_buttons($this, $this->_customdata);
+            $mform->addElement('hidden', 'configstep', 1);
+            $mform->setType('configstep', PARAM_INT);
+            $buttonarray = [];
+            $buttonarray[] = $mform->createElement('submit', 'continueconfig',
+                get_string('chaincontinueconfig', 'block_configurable_reports'));
+            $buttonarray[] = $mform->createElement('cancel');
+            $mform->addGroup($buttonarray, 'buttonar', '', ' ', false);
             return;
         }
 
@@ -154,16 +157,6 @@ class reportchain_form extends moodleform {
         }
 
         $pluginclass->add_filter_config_action_buttons($this, $this->_customdata);
-    }
-
-    /**
-     * JavaScript handler: reload with new child report and preserve draft fields.
-     *
-     * @param string $baseurl
-     * @return string
-     */
-    protected function build_childreport_change_handler(string $baseurl): string {
-        return "var u='" . $baseurl . "&childreportid='+this.value;" . $this->build_draft_append_js('u') . ";location.href=u";
     }
 
     /**
@@ -268,12 +261,23 @@ class reportchain_form extends moodleform {
             return $errors;
         }
 
+        if ((int) $data['childreportid'] === (int) $this->_customdata['report']->id) {
+            $errors['childreportid'] = get_string('chainerror_selfreference', 'block_configurable_reports');
+            return $errors;
+        }
+
+        if (!empty($data['configstep'])) {
+            return $errors;
+        }
+
         if (empty(trim((string) ($data['chainname'] ?? '')))) {
             $errors['chainname'] = get_string('chainerror_noname', 'block_configurable_reports');
         }
 
         $sourcereport = $this->_customdata['report'];
         $hascolumnmetadata = output_columns::has_metadata($sourcereport);
+        $pluginclass = $this->_customdata['pluginclass'];
+        $filteroptions = $pluginclass->get_child_filter_options((int) $data['childreportid']);
 
         if ($hascolumnmetadata) {
             $rowkeys = $this->normalise_rowkey_submission($data['rowkeycolumns'] ?? null);
@@ -301,14 +305,13 @@ class reportchain_form extends moodleform {
                 if ($hascolumnmetadata && !output_columns::is_known_column($sourcereport, $source)) {
                     $errors['mappinggroup' . $i] = get_string('chainerror_unknowncolumn', 'block_configurable_reports', $source);
                 }
+                if (!empty($filteroptions) && !array_key_exists($target, $filteroptions)) {
+                    $errors['mappinggroup' . $i] = get_string('chainerror_unknownfilter', 'block_configurable_reports', $target);
+                }
             }
         }
         if (!$hasmapping) {
             $errors['mappinggroup0'] = get_string('chainerror_nomappings', 'block_configurable_reports');
-        }
-
-        if ((int) $data['childreportid'] === (int) $sourcereport->id) {
-            $errors['childreportid'] = get_string('chainerror_selfreference', 'block_configurable_reports');
         }
 
         return $errors;
@@ -421,7 +424,7 @@ class reportchain_form extends moodleform {
         for ($i = 0; $i < $mappingcount; $i++) {
             unset($data->{'sourcecolumn' . $i}, $data->{'targetfilter' . $i}, $data->{'mappinggroup' . $i});
         }
-        unset($data->mappingcount);
+        unset($data->mappingcount, $data->configstep, $data->continueconfig);
         return $data;
     }
 }
