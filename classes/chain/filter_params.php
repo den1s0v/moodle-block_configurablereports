@@ -51,11 +51,16 @@ class filter_params {
                 }
                 return 'filter_searchtext';
             case 'fcoursefield':
+                if (!empty($formdata->field)) {
+                    return 'filter_fcoursefield_' . $formdata->field;
+                }
                 return 'filter_fcoursefield';
             case 'fuserfield':
-                return 'filter_fuserfield';
             case 'fsearchuserfield':
-                return 'filter_fsearchuserfield';
+                if (!empty($formdata->field)) {
+                    return 'filter_fuserfield_' . $formdata->field;
+                }
+                return 'filter_fuserfield';
             case 'coursecategories':
                 return 'filter_coursecategories';
             case 'startendtime':
@@ -63,6 +68,103 @@ class filter_params {
             default:
                 return 'filter_' . $pluginname;
         }
+    }
+
+    /**
+     * Human-readable filter label as shown on the report view form.
+     *
+     * @param string $pluginname
+     * @param object $formdata Filter plugin configuration.
+     * @param string $paramname Request parameter name for this filter.
+     * @return string
+     */
+    public static function get_filter_view_label(string $pluginname, object $formdata, string $paramname): string {
+        switch ($pluginname) {
+            case 'searchtext':
+                if (!empty($formdata->label)) {
+                    return (string) $formdata->label;
+                }
+                return get_string('filter', 'block_configurable_reports');
+            case 'fcoursefield':
+                if (!empty($formdata->field)) {
+                    return self::resolve_core_field_label($formdata->field);
+                }
+                break;
+            case 'fuserfield':
+            case 'fsearchuserfield':
+                return self::resolve_user_field_label($formdata);
+            case 'courses':
+                return get_string('course');
+            case 'coursecategories':
+            case 'categories':
+            case 'subcategories':
+                return get_string('category');
+            case 'users':
+                return get_string('users');
+            case 'user':
+                return get_string('user');
+            case 'startendtime':
+                if ($paramname === 'filter_endtime') {
+                    return get_string('endtime', 'block_configurable_reports');
+                }
+                return get_string('starttime', 'block_configurable_reports');
+            case 'semester':
+                return get_string('filtersemester', 'block_configurable_reports');
+            case 'role':
+                return get_string('filterrole', 'block_configurable_reports');
+            case 'yearnumeric':
+                return get_string('filteryearnumeric', 'block_configurable_reports');
+            case 'yearhebrew':
+                return get_string('filteryearhebrew', 'block_configurable_reports');
+            case 'coursemodules':
+                return get_string('filtercoursemodules', 'block_configurable_reports');
+            case 'enrolledstudents':
+                return get_string('student', 'block_configurable_reports');
+        }
+
+        $label = get_string($pluginname, 'block_configurable_reports', null, true);
+        if ($label !== '[[' . $pluginname . ']]') {
+            return $label;
+        }
+
+        return $paramname;
+    }
+
+    /**
+     * Resolve a standard DB field name to a display label.
+     *
+     * @param string $field
+     * @return string
+     */
+    private static function resolve_core_field_label(string $field): string {
+        $label = get_string($field, '', null, true);
+        if ($label !== '[[' . $field . ']]') {
+            return $label;
+        }
+        return $field;
+    }
+
+    /**
+     * Resolve user field filter label (core or custom profile field).
+     *
+     * @param object $formdata
+     * @return string
+     */
+    private static function resolve_user_field_label(object $formdata): string {
+        if (empty($formdata->field)) {
+            return get_string('filterfuserfield', 'block_configurable_reports');
+        }
+
+        if (strpos($formdata->field, 'profile_') === 0) {
+            global $DB;
+            $shortname = str_replace('profile_', '', $formdata->field);
+            $field = $DB->get_record('user_info_field', ['shortname' => $shortname], 'name', IGNORE_MISSING);
+            if ($field) {
+                return format_string($field->name);
+            }
+        }
+
+        return self::resolve_core_field_label($formdata->field);
     }
 
     /**
@@ -86,14 +188,20 @@ class filter_params {
             if ($paramname === '') {
                 continue;
             }
-            $label = get_string($pluginname, 'block_configurable_reports', null, true);
-            if ($label === '[[' . $pluginname . ']]') {
-                $label = $pluginname;
-            }
-            $options[$paramname] = $paramname . ' (' . $label . ')';
+            $options[$paramname] = self::get_filter_view_label($pluginname, $formdata, $paramname);
         }
 
         return $options;
+    }
+
+    /**
+     * View labels keyed by filter parameter name for a child report.
+     *
+     * @param object $childreport Child report record.
+     * @return array<string, string>
+     */
+    public static function get_child_filter_labels(object $childreport): array {
+        return self::get_child_filter_options($childreport);
     }
 
     /**

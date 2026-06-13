@@ -409,6 +409,7 @@ class definition {
             return self::result(true);
         }
 
+        $labels = filter_params::get_child_filter_labels($childreport);
         $bytarget = [];
         foreach ($formdata->filterbindings as $binding) {
             $target = trim((string) ($binding->targetfilter ?? ''));
@@ -420,24 +421,26 @@ class definition {
 
         foreach (array_keys($expected) as $paramname) {
             if (!isset($bytarget[$paramname])) {
+                $label = $labels[$paramname] ?? $paramname;
                 return self::result(false, get_string('chainerror_missingfilterbinding', 'block_configurable_reports',
-                    $paramname));
+                    $label));
             }
             $binding = $bytarget[$paramname];
             $mode = $binding->mode ?? '';
+            $label = $labels[$paramname] ?? $paramname;
             if ($mode === filter_params::MODE_COLUMN) {
                 if (trim((string) ($binding->sourcecolumn ?? '')) === '') {
                     return self::result(false, get_string('chainerror_nocolumnsource', 'block_configurable_reports',
-                        $paramname));
+                        $label));
                 }
             } else if ($mode === filter_params::MODE_CONSTANT) {
                 if (trim((string) ($binding->constantvalue ?? '')) === '') {
                     return self::result(false, get_string('chainerror_noconstantvalue', 'block_configurable_reports',
-                        $paramname));
+                        $label));
                 }
             } else if ($mode !== filter_params::MODE_EMPTY) {
                 return self::result(false, get_string('chainerror_invalidfiltermode', 'block_configurable_reports',
-                    $paramname));
+                    $label));
             }
         }
 

@@ -20,6 +20,7 @@ defined('MOODLE_INTERNAL') || die();
 
 use block_configurable_reports\chain\definition;
 use block_configurable_reports\chain\filter_params;
+use block_configurable_reports\chain\filter_params;
 
 /**
  * Tests for chain definition helpers.
@@ -135,6 +136,20 @@ class chain_definition_test extends \advanced_testcase {
         $params = definition::build_child_filter_params_for_row($table, 0, $formdata);
         $this->assertSame('', $params['filter_searchtext']);
         $this->assertSame('2024-1', $params['filter_courses']);
+    }
+
+    /**
+     * Filter view labels should match report view form captions.
+     */
+    public function test_get_filter_view_label_uses_configured_caption(): void {
+        $label = filter_params::get_filter_view_label('searchtext', (object) [
+            'label' => 'Group name',
+            'idnumber' => 'group',
+        ], 'filter_searchtext_group');
+        $this->assertSame('Group name', $label);
+
+        $courselabel = filter_params::get_filter_view_label('courses', new \stdClass(), 'filter_courses');
+        $this->assertSame(get_string('course'), $courselabel);
     }
 
     /**

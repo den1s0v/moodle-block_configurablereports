@@ -53,12 +53,13 @@ class plugin_reportchain extends plugin_base {
             return get_string('reportchain_summary_empty', 'block_configurable_reports');
         }
 
-        $child = $DB->get_record('block_configurable_reports', ['id' => (int) $data->childreportid], 'id,name', IGNORE_MISSING);
+        $child = $DB->get_record('block_configurable_reports', ['id' => (int) $data->childreportid], '*', IGNORE_MISSING);
         if (!$child) {
             return get_string('reportchain_summary_missing', 'block_configurable_reports');
         }
 
         $childname = format_string($child->name);
+        $filterlabels = filter_params::get_child_filter_labels($child);
         $mappingparts = [];
         foreach ($data->filterbindings as $binding) {
             $binding = (object) $binding;
@@ -66,21 +67,22 @@ class plugin_reportchain extends plugin_base {
             if ($target === '') {
                 continue;
             }
+            $targetlabel = $filterlabels[$target] ?? $target;
             $mode = $binding->mode ?? filter_params::MODE_EMPTY;
             switch ($mode) {
                 case filter_params::MODE_COLUMN:
                     $source = trim((string) ($binding->sourcecolumn ?? ''));
                     if ($source !== '') {
-                        $mappingparts[] = s($source) . ' → ' . s($target);
+                        $mappingparts[] = s($source) . ' → ' . s($targetlabel);
                     }
                     break;
                 case filter_params::MODE_CONSTANT:
                     $constant = (string) ($binding->constantvalue ?? '');
-                    $mappingparts[] = "'" . s($constant) . "' → " . s($target);
+                    $mappingparts[] = "'" . s($constant) . "' → " . s($targetlabel);
                     break;
                 case filter_params::MODE_EMPTY:
                 default:
-                    $mappingparts[] = '∅ → ' . s($target);
+                    $mappingparts[] = '∅ → ' . s($targetlabel);
                     break;
             }
         }

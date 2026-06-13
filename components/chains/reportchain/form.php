@@ -287,25 +287,26 @@ class reportchain_form extends moodleform {
             for ($i = 0; $i < $bindingcount; $i++) {
                 $target = $this->read_binding_field((object) $data, 'targetfilter', $i);
                 $mode = $this->read_binding_field((object) $data, 'mode', $i);
+                $targetlabel = $filteroptions[$target] ?? $target;
                 if ($target === '' || !array_key_exists($target, $filteroptions)) {
-                    $errors['filterbindinggroup' . $i] = get_string('chainerror_unknownfilter', 'block_configurable_reports', $target);
+                    $errors['filterbindinggroup' . $i] = get_string('chainerror_unknownfilter', 'block_configurable_reports', $targetlabel);
                     continue;
                 }
                 if (!filter_params::is_valid_mode($mode)) {
-                    $errors['filterbindinggroup' . $i] = get_string('chainerror_invalidfiltermode', 'block_configurable_reports', $target);
+                    $errors['filterbindinggroup' . $i] = get_string('chainerror_invalidfiltermode', 'block_configurable_reports', $targetlabel);
                     continue;
                 }
                 if ($mode === filter_params::MODE_COLUMN) {
                     $source = $this->read_binding_field((object) $data, 'sourcecolumn', $i);
                     if ($source === '') {
-                        $errors['filterbindinggroup' . $i] = get_string('chainerror_nocolumnsource', 'block_configurable_reports', $target);
+                        $errors['filterbindinggroup' . $i] = get_string('chainerror_nocolumnsource', 'block_configurable_reports', $targetlabel);
                     } else if ($hascolumnmetadata && !output_columns::is_known_column($sourcereport, $source)) {
                         $errors['filterbindinggroup' . $i] = get_string('chainerror_unknowncolumn', 'block_configurable_reports', $source);
                     }
                 } else if ($mode === filter_params::MODE_CONSTANT) {
                     $constant = $this->read_binding_field((object) $data, 'constantvalue', $i);
                     if ($constant === '') {
-                        $errors['filterbindinggroup' . $i] = get_string('chainerror_noconstantvalue', 'block_configurable_reports', $target);
+                        $errors['filterbindinggroup' . $i] = get_string('chainerror_noconstantvalue', 'block_configurable_reports', $targetlabel);
                     }
                 }
             }
