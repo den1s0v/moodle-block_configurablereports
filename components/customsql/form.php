@@ -68,9 +68,6 @@ class customsql_form extends moodleform {
 
         $mform =& $this->_form;
 
-        $mform->addElement('static', 'outputcolumnsdiagnostic', get_string('sqloutputcolumns_heading', 'block_configurable_reports'),
-            get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports'));
-
         $mform->addElement('textarea', 'querysql', get_string('querysql', 'block_configurable_reports'), 'rows="35" cols="80"');
         $mform->addRule('querysql', get_string('required'), 'required', null, 'client');
         $mform->setType('querysql', PARAM_RAW);
@@ -79,6 +76,9 @@ class customsql_form extends moodleform {
         $mform->setType('courseid', PARAM_INT);
 
         $this->add_action_buttons();
+
+        $mform->addElement('static', 'outputcolumnsdiagnostic', get_string('sqloutputcolumns_heading', 'block_configurable_reports'),
+            get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports'));
 
         $mform->addElement('static', 'note', '', get_string('listofsqlreports', 'block_configurable_reports'));
 
