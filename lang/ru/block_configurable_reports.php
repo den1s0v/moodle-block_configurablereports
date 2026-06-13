@@ -79,7 +79,7 @@ $string['emptyfilter_defaultvalue_hint'] = 'Образец для пользов
 $string['emptyfilter_defaultvalue_placeholder'] = 'напр. Иванов или idnumber курса';
 
 $string['chains'] = 'Цепочки';
-$string['sqloutputcolumns_heading'] = 'Выходные колонки (для цепочек)';
+$string['sqloutputcolumns_heading'] = 'Колонки отчёта (определено по SQL-запросу)';
 $string['sqloutputcolumns_status_yes'] = 'Колонки определены.';
 $string['sqloutputcolumns_status_no'] = 'Колонки не определены.';
 $string['sqloutputcolumns_list'] = 'Список: {$a}';

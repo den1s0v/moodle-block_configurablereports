@@ -640,7 +640,7 @@ $string['emptyfilter_defaultvalue_hint'] = 'Sample for users or a limit on first
 $string['emptyfilter_defaultvalue_placeholder'] = 'e.g. Smith or course idnumber';
 
 $string['chains'] = 'Chains';
-$string['sqloutputcolumns_heading'] = 'Output columns (for chains)';
+$string['sqloutputcolumns_heading'] = 'Report columns (detected from SQL query)';
 $string['sqloutputcolumns_status_yes'] = 'Columns detected.';
 $string['sqloutputcolumns_status_no'] = 'Columns not detected.';
 $string['sqloutputcolumns_list'] = 'List: {$a}';

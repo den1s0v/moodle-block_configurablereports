@@ -336,10 +336,10 @@ if ($compclass->plugins) {
 }
 
 if ($compclass->form) {
+    $editform->display();
     if ($comp === 'customsql' && $compclass instanceof component_customsql) {
         $compclass->print_output_columns_diagnostic();
     }
-    $editform->display();
 }
 
 if ($compclass->help) {
