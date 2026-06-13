@@ -68,7 +68,7 @@ class output_columns_test extends \advanced_testcase {
     }
 
     /**
-     * Diagnostic HTML should list detected columns.
+     * Diagnostic HTML should list detected columns and metadata source.
      */
     public function test_format_sql_save_diagnostic_detected(): void {
         $report = (object) [
@@ -79,6 +79,7 @@ class output_columns_test extends \advanced_testcase {
                         'outputcolumns' => ['courseid', 'name'],
                         'outputcolumns_detected' => 1,
                         'outputcolumns_reason' => 'ok',
+                        'outputcolumns_source' => 'metadata',
                         'outputcolumns_updated' => 1700000000,
                     ],
                 ],
@@ -101,7 +102,8 @@ class output_columns_test extends \advanced_testcase {
                     'config' => (object) [
                         'outputcolumns' => [],
                         'outputcolumns_detected' => 0,
-                        'outputcolumns_reason' => 'no_rows_empty',
+                        'outputcolumns_reason' => 'metadata_unavailable',
+                        'outputcolumns_source' => 'none',
                         'outputcolumns_updated' => 1700000000,
                     ],
                 ],

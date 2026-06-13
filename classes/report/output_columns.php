@@ -103,6 +103,7 @@ class output_columns {
             'columns' => self::get_column_names($report),
             'detected' => false,
             'reason' => '',
+            'source' => 'none',
             'updated' => 0,
         ];
 
@@ -120,6 +121,7 @@ class output_columns {
         }
 
         $meta->reason = (string) ($config->outputcolumns_reason ?? '');
+        $meta->source = (string) ($config->outputcolumns_source ?? 'none');
         $meta->updated = (int) ($config->outputcolumns_updated ?? 0);
 
         return $meta;
@@ -139,13 +141,18 @@ class output_columns {
             $lines[] = get_string('sqloutputcolumns_status_yes', 'block_configurable_reports');
             $lines[] = get_string('sqloutputcolumns_list', 'block_configurable_reports',
                 implode(', ', array_map('s', $meta->columns)));
+            if ($meta->source === 'metadata') {
+                $lines[] = get_string('sqloutputcolumns_source_metadata', 'block_configurable_reports');
+            } else if ($meta->source === 'first_row') {
+                $lines[] = get_string('sqloutputcolumns_source_firstrow', 'block_configurable_reports');
+            }
         } else {
             $lines[] = get_string('sqloutputcolumns_status_no', 'block_configurable_reports');
-            $reasonkey = 'sqloutputcolumns_reason_' . ($meta->reason ?: 'no_rows');
+            $reasonkey = 'sqloutputcolumns_reason_' . ($meta->reason ?: 'metadata_unavailable');
             if (get_string_manager()->string_exists($reasonkey, 'block_configurable_reports')) {
                 $lines[] = get_string($reasonkey, 'block_configurable_reports');
             } else {
-                $lines[] = get_string('sqloutputcolumns_reason_no_rows', 'block_configurable_reports');
+                $lines[] = get_string('sqloutputcolumns_reason_metadata_unavailable', 'block_configurable_reports');
             }
         }
 

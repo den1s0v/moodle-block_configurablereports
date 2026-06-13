@@ -45,6 +45,21 @@ class report_sql extends report_base {
     private int $filterexecmode = BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_NORMAL;
 
     /**
+     * @var \stdClass|null Memoized save probe result for the current POST.
+     */
+    private ?\stdClass $saveprobememo = null;
+
+    /**
+     * @var string SQL text used for the memoized save probe.
+     */
+    private string $saveprobememosql = '';
+
+    /**
+     * @var array<string, \stdClass> Save probe cache keyed by report id and SQL (one POST).
+     */
+    private static array $saveprobeglobalmemo = [];
+
+    /**
      * set_forexport
      *
      * @param bool $isforexport
@@ -92,10 +107,6 @@ class report_sql extends report_base {
 
         if ($mode === BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_SKIP) {
             return $rawsql;
-        }
-
-        if ($mode === BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_COLUMN_METADATA) {
-            return $this->prepare_sql($rawsql, ['columnextract' => true]);
         }
 
         $this->filterexecmode = $mode;
@@ -207,7 +218,6 @@ class report_sql extends report_base {
         global $USER, $CFG, $COURSE;
 
         $restrictive = !empty($options['restrictive']);
-        $columnextract = !empty($options['columnextract']);
 
         // Enable debug mode from SQL query.
         $this->config->debug = strpos($sql, '%%DEBUG%%') !== false;
@@ -237,8 +247,6 @@ class report_sql extends report_base {
 
         if ($restrictive) {
             $sql = preg_replace('/%%FILTER_[^%]+%%/i', ' AND 1=0 ', $sql);
-        } else if ($columnextract) {
-            $sql = preg_replace('/%%FILTER_[^%]+%%/i', ' ', $sql);
         }
 
         $sql = preg_replace('/%{2}[^%]+%{2}/i', '', $sql);
@@ -256,6 +264,16 @@ class report_sql extends report_base {
         global $CFG;
 
         return preg_replace('/\bprefix_(?=\w+)/i', $CFG->prefix, $sql);
+    }
+
+    /**
+     * Normalize table prefixes for save-time SQL probe.
+     *
+     * @param string $sql
+     * @return string
+     */
+    public function normalize_sql_prefixes_for_probe(string $sql): string {
+        return $this->normalize_sql_prefixes($sql);
     }
 
     /**
@@ -346,52 +364,53 @@ class report_sql extends report_base {
     }
 
     /**
+     * Unified restrictive save probe: validate SQL and extract output columns.
+     *
+     * Result is memoized per report instance for the duration of one POST.
+     *
+     * @param string $rawsql
+     * @return \stdClass valid, error, columns, detected, reason, columns_source
+     */
+    public function probe_on_save(string $rawsql): \stdClass {
+        $cachekey = (int) ($this->config->id ?? 0) . "\0" . $rawsql;
+        if (isset(self::$saveprobeglobalmemo[$cachekey])) {
+            $this->saveprobememo = self::$saveprobeglobalmemo[$cachekey];
+            $this->saveprobememosql = $rawsql;
+            return $this->saveprobememo;
+        }
+
+        if ($this->saveprobememo !== null && $this->saveprobememosql === $rawsql) {
+            return $this->saveprobememo;
+        }
+
+        global $CFG;
+        require_once($CFG->dirroot . '/blocks/configurable_reports/classes/sql/save_probe.php');
+
+        $this->saveprobememo = \block_configurable_reports\sql\save_probe::run(
+            $this,
+            $rawsql,
+            function (string $sql): void {
+                $this->explain_query_sql($sql);
+            }
+        );
+        $this->saveprobememosql = $rawsql;
+        self::$saveprobeglobalmemo[$cachekey] = $this->saveprobememo;
+
+        return $this->saveprobememo;
+    }
+
+    /**
      * Validate SQL syntax by running a restrictive version of the query.
      *
      * @param string $rawsql
      * @return string|null Error message or null if valid.
      */
     public function validate_query_sql(string $rawsql): ?string {
-        core_php_time_limit::raise(60);
-
-        try {
-            $sql = $this->build_sql_from_config($rawsql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE);
-            $sql = $this->normalize_sql_prefixes($sql);
-
-            if (get_config('block_configurable_reports', 'validate_sql_with_explain')) {
-                try {
-                    $this->explain_query_sql($sql);
-                    return null;
-                } catch (\block_configurable_reports\exceptions\explain_unsupported_exception $e) {
-                    // Unsupported DB family — fall back to execute with maxrows 1.
-                } catch (dml_exception $e) {
-                    // EXPLAIN failed at runtime — fall back to execute with maxrows 1.
-                } catch (Throwable $e) {
-                    if (defined('DEBUG_DEVELOPER') && DEBUG_DEVELOPER) {
-                        throw $e;
-                    }
-                }
-            }
-
-            $rs = $this->execute_query($sql, [
-                'validation' => true,
-                'maxrows' => 1,
-                'prefixes_normalized' => true,
-            ]);
-            if ($rs) {
-                $rs->close();
-            }
-        } catch (dml_read_exception $e) {
-            return get_string('queryfailed', 'block_configurable_reports', $e->error);
-        } catch (moodle_exception $e) {
-            return $e->getMessage();
-        }
-
-        return null;
+        return $this->probe_on_save($rawsql)->error;
     }
 
     /**
-     * Extract output column names from a SQL query (first result row keys).
+     * Extract output column names from a SQL query.
      *
      * @param string $rawsql
      * @return array<int, string>
@@ -403,68 +422,18 @@ class report_sql extends report_base {
     /**
      * Extract output column metadata with detection status for diagnostics.
      *
-     * Filter placeholders are neutralized (not restrictive AND 1=0) so column
-     * names can be read even when the report uses %%FILTER_*%% tokens.
-     *
      * @param string $rawsql
-     * @return \stdClass columns, detected, reason
+     * @return \stdClass columns, detected, reason, columns_source
      */
     public function extract_output_columns_result(string $rawsql): \stdClass {
-        $result = (object) [
-            'columns' => [],
-            'detected' => false,
-            'reason' => 'no_rows',
+        $probe = $this->probe_on_save($rawsql);
+
+        return (object) [
+            'columns' => $probe->columns,
+            'detected' => $probe->detected,
+            'reason' => $probe->reason,
+            'columns_source' => $probe->columns_source,
         ];
-
-        core_php_time_limit::raise(60);
-
-        try {
-            $sql = $this->build_sql_from_config($rawsql, BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_COLUMN_METADATA);
-            $sql = $this->normalize_sql_prefixes($sql);
-
-            $rs = $this->execute_query($sql, [
-                'validation' => true,
-                'maxrows' => 1,
-                'prefixes_normalized' => true,
-            ]);
-            if (!$rs) {
-                $result->reason = $this->guess_column_extraction_failure_reason($rawsql);
-                return $result;
-            }
-
-            $columns = [];
-            foreach ($rs as $row) {
-                $columns = self::column_names_from_record($row);
-                break;
-            }
-            $rs->close();
-
-            if (!empty($columns)) {
-                $result->columns = $columns;
-                $result->detected = true;
-                $result->reason = 'ok';
-                return $result;
-            }
-
-            $result->reason = $this->guess_column_extraction_failure_reason($rawsql);
-        } catch (Throwable $e) {
-            $result->reason = 'error';
-        }
-
-        return $result;
-    }
-
-    /**
-     * Guess why column extraction returned no names.
-     *
-     * @param string $rawsql
-     * @return string Reason code: no_rows, no_rows_empty, error.
-     */
-    protected function guess_column_extraction_failure_reason(string $rawsql): string {
-        if (!preg_match('/%%FILTER_[^%]+%%/i', $rawsql)) {
-            return 'no_rows_empty';
-        }
-        return 'no_rows';
     }
 
     /**

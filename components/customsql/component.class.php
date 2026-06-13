@@ -65,6 +65,7 @@ class component_customsql extends component_base {
             $data->outputcolumns = $extraction->columns;
             $data->outputcolumns_detected = !empty($extraction->detected) ? 1 : 0;
             $data->outputcolumns_reason = $extraction->reason;
+            $data->outputcolumns_source = $extraction->columns_source ?? 'none';
             $data->outputcolumns_updated = time();
             // Function cr_serialize() will add slashes.
             $components = cr_unserialize($this->config->components);
