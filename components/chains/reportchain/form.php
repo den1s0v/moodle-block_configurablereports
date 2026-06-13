@@ -130,11 +130,8 @@ class reportchain_form extends moodleform {
         if (empty($filteroptions)) {
             $mform->addElement('static', 'nofilters', '', get_string('chainnofilters', 'block_configurable_reports'));
         } else {
-            $mform->addElement('static', 'filterbindingsheader', '',
-                html_writer::div(
-                    get_string('chainfilterbindingsheader', 'block_configurable_reports'),
-                    'chain-filter-bindings-header fw-bold mb-2'
-                ));
+            $mform->addElement('header', 'filterbindingsheader',
+                get_string('chainfilterbindingsheader', 'block_configurable_reports'));
             $mform->addHelpButton('filterbindingsheader', 'chainfilterbindingsheader', 'block_configurable_reports');
             $chooseoption = ['' => get_string('choose')];
             $bindingcolumnoptions = !empty($sourcecolumnoptions) ? ($chooseoption + $sourcecolumnoptions) : [];
@@ -169,7 +166,6 @@ class reportchain_form extends moodleform {
             $mform->setType($targetfield, PARAM_RAW);
 
             $groupelements = [];
-            $groupelements[] = $mform->createElement('static', 'filterlabel' . $i, '', $filterlabel);
             $groupelements[] = $mform->createElement('select', $modefield, '', $modeoptions);
             if (!empty($sourcecolumnoptions)) {
                 $groupelements[] = $mform->createElement('select', $sourcefield, '', $sourcecolumnoptions);
@@ -181,7 +177,7 @@ class reportchain_form extends moodleform {
             $mform->addGroup(
                 $groupelements,
                 'filterbindinggroup' . $i,
-                get_string('chainfilterbindingheader', 'block_configurable_reports', $i + 1),
+                $filterlabel,
                 html_writer::span(' | ', 'px-2'),
                 false
             );
