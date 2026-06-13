@@ -82,9 +82,6 @@ class component_customsql extends component_base {
                 (string) ($extraction->reason ?? ''),
                 (int) $data->outputcolumns_updated
             );
-            if (method_exists($cform, 'refresh_output_columns_diagnostic')) {
-                $cform->refresh_output_columns_diagnostic();
-            }
             // Function cr_serialize() will add slashes.
             $components = cr_unserialize($this->config->components);
             $components['customsql']['config'] = $data;
@@ -117,7 +114,40 @@ class component_customsql extends component_base {
             return $this->outputcolumnsdiagnostichtml;
         }
 
-        return \block_configurable_reports\report\output_columns::format_sql_save_diagnostic($this->config);
+        $components = cr_unserialize($this->config->components ?? '');
+        $sqlconfig = $components['customsql']['config'] ?? new \stdClass();
+
+        $columns = [];
+        foreach ($sqlconfig->outputcolumns ?? [] as $column) {
+            $name = trim((string) $column);
+            if ($name !== '') {
+                $columns[] = $name;
+            }
+        }
+
+        $detected = !empty($sqlconfig->outputcolumns_detected) || !empty($columns);
+
+        return \block_configurable_reports\report\output_columns::format_diagnostic(
+            $columns,
+            $detected,
+            (string) ($sqlconfig->outputcolumns_reason ?? ''),
+            (int) ($sqlconfig->outputcolumns_updated ?? 0)
+        );
+    }
+
+    /**
+     * Print the output columns diagnostic panel on the SQL settings page.
+     *
+     * @return void
+     */
+    public function print_output_columns_diagnostic(): void {
+        global $OUTPUT;
+
+        echo $OUTPUT->heading(get_string('sqloutputcolumns_heading', 'block_configurable_reports'), 4);
+        echo $OUTPUT->box(
+            $this->get_output_columns_diagnostic_html(),
+            'generalbox boxwidthnormal boxaligncenter sql-outputcolumns-diagnostic'
+        );
     }
 
 }

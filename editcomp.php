@@ -109,9 +109,6 @@ if ($compclass->form) {
     }
 
     $compclass->form_set_data($editform);
-    if ($comp === 'customsql' && method_exists($editform, 'refresh_output_columns_diagnostic')) {
-        $editform->refresh_output_columns_diagnostic();
-    }
 }
 
 if ($compclass->plugins) {
@@ -339,6 +336,9 @@ if ($compclass->plugins) {
 }
 
 if ($compclass->form) {
+    if ($comp === 'customsql' && $compclass instanceof component_customsql) {
+        $compclass->print_output_columns_diagnostic();
+    }
     $editform->display();
 }
 

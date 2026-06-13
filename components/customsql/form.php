@@ -39,36 +39,6 @@ class customsql_form extends moodleform {
     // See http://moodle.org/mod/data/view.php?d=13&rid=2884.
 
     /**
-     * @return void
-     */
-    public function definition_after_data(): void {
-        parent::definition_after_data();
-        $this->refresh_output_columns_diagnostic();
-    }
-
-    /**
-     * Update the static diagnostic element from the component.
-     *
-     * @return void
-     */
-    public function refresh_output_columns_diagnostic(): void {
-        $mform = $this->_form;
-        if (!$mform->elementExists('outputcolumnsdiagnostic')) {
-            return;
-        }
-
-        $compclass = $this->_customdata['compclass'] ?? null;
-        if (!$compclass || !method_exists($compclass, 'get_output_columns_diagnostic_html')) {
-            return;
-        }
-
-        $element = $mform->getElement('outputcolumnsdiagnostic');
-        if (is_object($element) && method_exists($element, 'setText')) {
-            $element->setText($compclass->get_output_columns_diagnostic_html());
-        }
-    }
-
-    /**
      * Form definition
      */
     public function definition(): void {
@@ -84,14 +54,6 @@ class customsql_form extends moodleform {
         $mform->setType('courseid', PARAM_INT);
 
         $this->add_action_buttons();
-
-        $compclass = $this->_customdata['compclass'] ?? null;
-        $diagnostictext = get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports');
-        if ($compclass && method_exists($compclass, 'get_output_columns_diagnostic_html')) {
-            $diagnostictext = $compclass->get_output_columns_diagnostic_html();
-        }
-        $mform->addElement('static', 'outputcolumnsdiagnostic', get_string('sqloutputcolumns_heading', 'block_configurable_reports'),
-            $diagnostictext);
 
         $mform->addElement('static', 'note', '', get_string('listofsqlreports', 'block_configurable_reports'));
 

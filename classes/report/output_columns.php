@@ -158,7 +158,7 @@ class output_columns {
             $lines[] = get_string('sqloutputcolumns_not_saved_yet', 'block_configurable_reports');
         }
 
-        return \html_writer::alist($lines, null, 'ul');
+        return \html_writer::div(implode('<br />', $lines), 'sql-outputcolumns-diagnostic-content');
     }
 
     /**
