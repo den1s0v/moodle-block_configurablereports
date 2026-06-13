@@ -59,9 +59,11 @@ class component_customsql extends component_base {
         global $DB, $CFG;
         if ($this->form) {
             $data = $cform->get_data();
+            $rawsql = trim((string) ($data->querysql ?? ''));
             require_once($CFG->dirroot . '/blocks/configurable_reports/reports/sql/report.class.php');
             $reportclass = new report_sql($this->config->id);
-            $extraction = $reportclass->extract_output_columns_result($data->querysql);
+            $extraction = $reportclass->extract_output_columns_result($rawsql);
+            $data->querysql = $rawsql;
             $data->outputcolumns = $extraction->columns;
             $data->outputcolumns_detected = !empty($extraction->detected) ? 1 : 0;
             $data->outputcolumns_reason = $extraction->reason;

@@ -58,32 +58,42 @@ class save_probe_test extends \advanced_testcase {
     }
 
     /**
+     * Native probe should read metadata even when restrictive SQL returns zero rows.
+     */
+    public function test_probe_query_columns_reads_metadata_without_rows(): void {
+        global $DB;
+
+        $read = result_column_reader::probe_query_columns($DB, 'SELECT 1 AS courseid, 2 AS coursename WHERE 1=0', 1);
+
+        $this->assertContains('courseid', $read->columns);
+        $this->assertContains('coursename', $read->columns);
+        $this->assertSame('metadata', $read->source);
+    }
+
+    /**
      * probe_on_save should memoize results for the same SQL within one request.
      */
     public function test_probe_on_save_memoization(): void {
         global $CFG;
         require_once($CFG->dirroot . '/blocks/configurable_reports/reports/sql/report.class.php');
 
+        \report_sql::clear_save_probe_memo();
+
         $report = $this->getMockBuilder(\report_sql::class)
             ->disableOriginalConstructor()
-            ->onlyMethods(['build_sql_from_config', 'normalize_sql_prefixes_for_probe', 'execute_query'])
+            ->onlyMethods(['build_sql_from_config', 'normalize_sql_prefixes_for_probe'])
             ->getMock();
 
-        $report->method('build_sql_from_config')->willReturn('SELECT 1 AS id');
+        $report->method('build_sql_from_config')->willReturn('SELECT 1 AS id WHERE 1=0');
         $report->method('normalize_sql_prefixes_for_probe')->willReturnArgument(0);
-        $report->expects($this->once())
-            ->method('execute_query')
-            ->willReturn(new fake_row_recordset([
-                (object) ['id' => 1],
-            ]));
 
-        $first = $report->probe_on_save('SELECT 1 AS id');
-        $second = $report->probe_on_save('SELECT 1 AS id');
+        $first = $report->probe_on_save('SELECT 1 AS id WHERE 1=0');
+        $second = $report->probe_on_save('SELECT 1 AS id WHERE 1=0');
 
         $this->assertTrue($first->valid);
         $this->assertSame($first, $second);
-        $this->assertSame(['id'], $first->columns);
-        $this->assertSame('first_row', $first->columns_source);
+        $this->assertContains('id', $first->columns);
+        $this->assertSame('metadata', $first->columns_source);
     }
 }
 

@@ -67,16 +67,7 @@ class save_probe {
                 }
             }
 
-            $rs = $report->execute_query($sql, [
-                'validation' => true,
-                'maxrows' => 1,
-                'prefixes_normalized' => true,
-            ]);
-
-            $columnread = result_column_reader::read_with_source($rs, $remotedb);
-            if ($rs) {
-                $rs->close();
-            }
+            $columnread = result_column_reader::probe_query_columns($remotedb, $sql, 1);
 
             $result->columns = $columnread->columns;
             $result->columns_source = $columnread->source;

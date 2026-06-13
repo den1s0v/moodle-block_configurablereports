@@ -60,6 +60,15 @@ class report_sql extends report_base {
     private static array $saveprobeglobalmemo = [];
 
     /**
+     * Clear save probe memoization (testing and long-running processes).
+     *
+     * @return void
+     */
+    public static function clear_save_probe_memo(): void {
+        self::$saveprobeglobalmemo = [];
+    }
+
+    /**
      * set_forexport
      *
      * @param bool $isforexport
