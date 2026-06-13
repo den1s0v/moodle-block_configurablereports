@@ -19,6 +19,7 @@ namespace block_configurable_reports\chain;
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/blocks/configurable_reports/locallib.php');
+require_once($CFG->dirroot . '/blocks/configurable_reports/classes/chain/filter_params.php');
 
 /**
  * Chain configuration helpers and validation.
@@ -102,24 +103,8 @@ class definition {
             $normalised->rowkeycolumns = [];
         }
 
-        if (!isset($normalised->mappings) || !is_array($normalised->mappings)) {
-            $normalised->mappings = [];
-        }
-
-        $mappings = [];
-        foreach ($normalised->mappings as $mapping) {
-            $mapping = (object) $mapping;
-            $source = trim((string) ($mapping->sourcecolumn ?? ''));
-            $target = trim((string) ($mapping->targetfilter ?? ''));
-            if ($source === '' || $target === '') {
-                continue;
-            }
-            $mappings[] = (object) [
-                'sourcecolumn' => $source,
-                'targetfilter' => $target,
-            ];
-        }
-        $normalised->mappings = $mappings;
+        $normalised->filterbindings = self::normalise_filterbindings($normalised);
+        unset($normalised->mappings);
 
         if (empty($normalised->filenamepattern)) {
             $normalised->filenamepattern = '##reportname##_##row##';
@@ -300,8 +285,12 @@ class definition {
             return self::result(false, get_string('chainerror_childmissing', 'block_configurable_reports'));
         }
 
-        if (empty($formdata->mappings)) {
-            return self::result(false, get_string('chainerror_nomappings', 'block_configurable_reports'));
+        $childfilters = filter_params::get_child_filter_options($child);
+        if (!empty($childfilters)) {
+            $bindingcheck = self::validate_filterbindings($child, $formdata);
+            if (!$bindingcheck->valid) {
+                return $bindingcheck;
+            }
         }
 
         if (empty($formdata->rowkeycolumns)) {
@@ -344,10 +333,111 @@ class definition {
             }
         }
 
-        foreach ($formdata->mappings as $mapping) {
-            $source = trim((string) ($mapping->sourcecolumn ?? ''));
+        foreach ($formdata->filterbindings as $binding) {
+            if (($binding->mode ?? '') !== filter_params::MODE_COLUMN) {
+                continue;
+            }
+            $source = trim((string) ($binding->sourcecolumn ?? ''));
             if ($source !== '' && !in_array($source, $metadata, true)) {
                 return self::result(false, get_string('chainerror_unknowncolumn', 'block_configurable_reports', $source));
+            }
+        }
+
+        return self::result(true);
+    }
+
+    /**
+     * Normalise filter binding records and migrate legacy mappings.
+     *
+     * @param object $formdata
+     * @return array<int, object>
+     */
+    public static function normalise_filterbindings(object $formdata): array {
+        $bindings = [];
+
+        if (!empty($formdata->filterbindings) && is_array($formdata->filterbindings)) {
+            foreach ($formdata->filterbindings as $binding) {
+                $binding = (object) $binding;
+                $target = trim((string) ($binding->targetfilter ?? ''));
+                if ($target === '') {
+                    continue;
+                }
+                $mode = trim((string) ($binding->mode ?? filter_params::MODE_EMPTY));
+                if (!filter_params::is_valid_mode($mode)) {
+                    $mode = filter_params::MODE_EMPTY;
+                }
+                $bindings[] = (object) [
+                    'targetfilter' => $target,
+                    'mode' => $mode,
+                    'sourcecolumn' => trim((string) ($binding->sourcecolumn ?? '')),
+                    'constantvalue' => (string) ($binding->constantvalue ?? ''),
+                ];
+            }
+            return $bindings;
+        }
+
+        if (!empty($formdata->mappings) && is_array($formdata->mappings)) {
+            foreach ($formdata->mappings as $mapping) {
+                $mapping = (object) $mapping;
+                $source = trim((string) ($mapping->sourcecolumn ?? ''));
+                $target = trim((string) ($mapping->targetfilter ?? ''));
+                if ($source === '' || $target === '') {
+                    continue;
+                }
+                $bindings[] = (object) [
+                    'targetfilter' => $target,
+                    'mode' => filter_params::MODE_COLUMN,
+                    'sourcecolumn' => $source,
+                    'constantvalue' => '',
+                ];
+            }
+        }
+
+        return $bindings;
+    }
+
+    /**
+     * Validate filter bindings against the child report filter set.
+     *
+     * @param object $childreport
+     * @param object $formdata Normalised chain form data.
+     * @return \stdClass
+     */
+    public static function validate_filterbindings(object $childreport, object $formdata): \stdClass {
+        $expected = filter_params::get_child_filter_options($childreport);
+        if (empty($expected)) {
+            return self::result(true);
+        }
+
+        $bytarget = [];
+        foreach ($formdata->filterbindings as $binding) {
+            $target = trim((string) ($binding->targetfilter ?? ''));
+            if ($target === '') {
+                continue;
+            }
+            $bytarget[$target] = $binding;
+        }
+
+        foreach (array_keys($expected) as $paramname) {
+            if (!isset($bytarget[$paramname])) {
+                return self::result(false, get_string('chainerror_missingfilterbinding', 'block_configurable_reports',
+                    $paramname));
+            }
+            $binding = $bytarget[$paramname];
+            $mode = $binding->mode ?? '';
+            if ($mode === filter_params::MODE_COLUMN) {
+                if (trim((string) ($binding->sourcecolumn ?? '')) === '') {
+                    return self::result(false, get_string('chainerror_nocolumnsource', 'block_configurable_reports',
+                        $paramname));
+                }
+            } else if ($mode === filter_params::MODE_CONSTANT) {
+                if (trim((string) ($binding->constantvalue ?? '')) === '') {
+                    return self::result(false, get_string('chainerror_noconstantvalue', 'block_configurable_reports',
+                        $paramname));
+                }
+            } else if ($mode !== filter_params::MODE_EMPTY) {
+                return self::result(false, get_string('chainerror_invalidfiltermode', 'block_configurable_reports',
+                    $paramname));
             }
         }
 
@@ -433,28 +523,104 @@ class definition {
     }
 
     /**
-     * Map parent row values to child filter parameters.
+     * Map parent row values to child filter parameters via explicit bindings.
      *
      * @param object $table
      * @param int $rowindex
      * @param object $formdata Normalised chain form data.
      * @return array<string, mixed>
      */
-    public static function build_filter_params_for_row(object $table, int $rowindex, object $formdata): array {
+    public static function build_child_filter_params_for_row(object $table, int $rowindex, object $formdata): array {
         $params = [];
         $row = $table->data[$rowindex] ?? [];
 
-        foreach ($formdata->mappings as $mapping) {
-            $colindex = array_search($mapping->sourcecolumn, $table->head, true);
-            $value = '';
-            if ($colindex !== false) {
-                $value = strip_tags((string) ($row[$colindex] ?? ''));
-                $value = trim(html_entity_decode($value, ENT_QUOTES, 'UTF-8'));
+        foreach ($formdata->filterbindings as $binding) {
+            $target = trim((string) ($binding->targetfilter ?? ''));
+            if ($target === '') {
+                continue;
             }
-            $params[$mapping->targetfilter] = $value;
+            switch ($binding->mode ?? filter_params::MODE_EMPTY) {
+                case filter_params::MODE_COLUMN:
+                    $colindex = array_search($binding->sourcecolumn, $table->head, true);
+                    $value = '';
+                    if ($colindex !== false) {
+                        $value = strip_tags((string) ($row[$colindex] ?? ''));
+                        $value = trim(html_entity_decode($value, ENT_QUOTES, 'UTF-8'));
+                    }
+                    $params[$target] = $value;
+                    break;
+                case filter_params::MODE_CONSTANT:
+                    $params[$target] = (string) ($binding->constantvalue ?? '');
+                    break;
+                case filter_params::MODE_EMPTY:
+                default:
+                    $params[$target] = '';
+                    break;
+            }
         }
 
         return $params;
+    }
+
+    /**
+     * @deprecated Use build_child_filter_params_for_row().
+     * @param object $table
+     * @param int $rowindex
+     * @param object $formdata
+     * @return array<string, mixed>
+     */
+    public static function build_filter_params_for_row(object $table, int $rowindex, object $formdata): array {
+        return self::build_child_filter_params_for_row($table, $rowindex, $formdata);
+    }
+
+    /**
+     * Hash of column-binding values for a parent row (deduplication key).
+     *
+     * @param object $table
+     * @param int $rowindex
+     * @param object $formdata Normalised chain form data.
+     * @return string
+     */
+    public static function build_column_mapping_hash(object $table, int $rowindex, object $formdata): string {
+        $parts = [];
+        foreach ($formdata->filterbindings as $binding) {
+            if (($binding->mode ?? '') !== filter_params::MODE_COLUMN) {
+                continue;
+            }
+            $target = trim((string) ($binding->targetfilter ?? ''));
+            $params = self::build_child_filter_params_for_row($table, $rowindex, (object) [
+                'filterbindings' => [$binding],
+            ]);
+            $parts[$target] = $params[$target] ?? '';
+        }
+        ksort($parts);
+        return sha1(json_encode($parts));
+    }
+
+    /**
+     * Group row indexes that share the same column-binding values.
+     *
+     * @param object $table
+     * @param array<int, int> $rowindexes
+     * @param object $formdata Normalised chain form data.
+     * @return array<int, object> Objects with rowindex, count, rowindexes.
+     */
+    public static function group_row_indexes_by_column_mapping(object $table, array $rowindexes, object $formdata): array {
+        $groups = [];
+        foreach ($rowindexes as $rowindex) {
+            $hash = self::build_column_mapping_hash($table, $rowindex, $formdata);
+            if (!isset($groups[$hash])) {
+                $groups[$hash] = (object) [
+                    'rowindex' => $rowindex,
+                    'count' => 1,
+                    'rowindexes' => [$rowindex],
+                ];
+            } else {
+                $groups[$hash]->count++;
+                $groups[$hash]->rowindexes[] = $rowindex;
+            }
+        }
+        return array_values($groups);
     }
 
     /**

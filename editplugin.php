@@ -147,53 +147,12 @@ $pluginclass = new $pluginclassname($report);
 
 $removemapping = optional_param('removemapping', -1, PARAM_INT);
 if ($comp === 'chains' && $pname === 'reportchain' && $removemapping >= 0 && $cid && confirm_sesskey()) {
-    $components = cr_unserialize($report->components);
-    $elements = $components[$comp]['elements'] ?? [];
-    $currentmappingcount = optional_param('mappingcount', 0, PARAM_INT);
-    if ($currentmappingcount <= 0) {
-        foreach ($elements as $e) {
-            if ($e['id'] == $cid) {
-                $stored = \block_configurable_reports\chain\definition::normalise_formdata(
-                    (object) ($e['formdata'] ?? new stdClass())
-                );
-                $currentmappingcount = max(1, count($stored->mappings));
-                break;
-            }
-        }
-    }
-    $newmappingcount = max(1, $currentmappingcount - 1);
-    $saved = false;
-
-    foreach ($elements as $key => $e) {
-        if ($e['id'] != $cid) {
-            continue;
-        }
-        $storedform = \block_configurable_reports\chain\definition::normalise_formdata(
-            (object) ($e['formdata'] ?? new stdClass())
-        );
-        $mappings = array_values($storedform->mappings);
-        if ($removemapping < count($mappings)) {
-            array_splice($mappings, $removemapping, 1);
-            $storedform->mappings = $mappings;
-            $e['formdata'] = $storedform;
-            $e['summary'] = $pluginclass->summary($storedform);
-            $elements[$key] = $e;
-            $components[$comp]['elements'] = $elements;
-            $report->components = cr_serialize($components);
-            $DB->update_record('block_configurable_reports', $report);
-            $saved = true;
-        }
-        break;
-    }
-
+    // Legacy remove-mapping URLs: redirect to the chain editor without side effects.
     $redirectparams = ['id' => $id, 'comp' => $comp, 'pname' => $pname, 'cid' => $cid];
     $redirectparams = array_merge($redirectparams, \block_configurable_reports\chain\definition::get_form_draft_url_params());
     $redirectchild = optional_param('childreportid', 0, PARAM_INT);
     if ($redirectchild > 0) {
         $redirectparams['childreportid'] = $redirectchild;
-    }
-    if ($newmappingcount > 1 || !$saved) {
-        $redirectparams['mappingcount'] = $newmappingcount;
     }
     redirect(new moodle_url('/blocks/configurable_reports/editplugin.php', $redirectparams));
     exit;
@@ -225,16 +184,11 @@ if (isset($pluginclass->form) && $pluginclass->form) {
             if (!empty($storedform->childreportid)) {
                 $formcustomdata['storedchildreportid'] = (int) $storedform->childreportid;
             }
-            $formcustomdata['initialmappingcount'] = max(1, count($storedform->mappings ?? []));
         }
         $requestedchild = optional_param('childreportid', 0, PARAM_INT);
         if ($requestedchild > 0) {
             $formcustomdata['storedchildreportid'] = $requestedchild;
         }
-        $requestedmappingcount = optional_param('mappingcount', 0, PARAM_INT);
-        $formcustomdata['mappingcount'] = $requestedmappingcount > 0
-            ? $requestedmappingcount
-            : ($formcustomdata['initialmappingcount'] ?? 1);
         $formcustomdata['chaindraftparams'] = \block_configurable_reports\chain\definition::get_form_draft_url_params();
         $formcustomdata['formbaseurl'] = $formurl->out(false);
     }
@@ -305,8 +259,8 @@ if (isset($pluginclass->form) && $pluginclass->form) {
             redirect(new moodle_url('/blocks/configurable_reports/editplugin.php', $redirectparams));
             exit;
         }
-        if ($comp === 'chains' && $pname === 'reportchain' && method_exists($editform, 'prepare_mapping_data')) {
-            $data = $editform->prepare_mapping_data($data);
+        if ($comp === 'chains' && $pname === 'reportchain' && method_exists($editform, 'prepare_filterbinding_data')) {
+            $data = $editform->prepare_filterbinding_data($data);
             $data = \block_configurable_reports\chain\definition::normalise_formdata($data);
         }
         if (!empty($cdata)) {

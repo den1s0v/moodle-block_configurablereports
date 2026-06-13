@@ -18,6 +18,7 @@ defined('MOODLE_INTERNAL') || die;
 
 require_once($CFG->libdir . '/formslib.php');
 
+use block_configurable_reports\chain\filter_params;
 use block_configurable_reports\report\output_columns;
 
 /**
@@ -128,35 +129,72 @@ class reportchain_form extends moodleform {
         $filteroptions = $pluginclass->get_child_filter_options($childreportid);
         if (empty($filteroptions)) {
             $mform->addElement('static', 'nofilters', '', get_string('chainnofilters', 'block_configurable_reports'));
-        }
-
-        $mappingcount = max(1, (int) ($this->_customdata['mappingcount'] ?? 1));
-        $chooseoption = ['' => get_string('choose')];
-        $mappingcolumnoptions = !empty($sourcecolumnoptions) ? ($chooseoption + $sourcecolumnoptions) : [];
-        $mappingfilteroptions = !empty($filteroptions) ? ($chooseoption + $filteroptions) : [];
-
-        $mform->addElement('static', 'mappingcolumnsheader', '',
-            html_writer::div(
-                get_string('chainmappingcolumnsheader', 'block_configurable_reports'),
-                'chain-mapping-columns-header fw-bold mb-2'
-            ));
-        $this->add_mapping_groups($mform, $mappingcount, $mappingfilteroptions, $mappingcolumnoptions);
-
-        $mform->addElement('hidden', 'mappingcount', $mappingcount);
-        $mform->setType('mappingcount', PARAM_INT);
-
-        if (!empty($this->_customdata['formbaseurl'])) {
-            $addurl = $this->append_chain_url_params(new moodle_url($this->_customdata['formbaseurl'], [
-                'mappingcount' => $mappingcount + 1,
-                'childreportid' => $childreportid,
-            ]));
-            $mform->addElement('static', 'addmappinglink', '',
-                html_writer::link('#', get_string('chainaddmapping', 'block_configurable_reports'), [
-                    'onclick' => $this->build_chain_navigation_onclick($addurl->out(false)),
-                ]));
+        } else {
+            $mform->addElement('static', 'filterbindingsheader', '',
+                html_writer::div(
+                    get_string('chainfilterbindingsheader', 'block_configurable_reports'),
+                    'chain-filter-bindings-header fw-bold mb-2'
+                ));
+            $mform->addHelpButton('filterbindingsheader', 'chainfilterbindingsheader', 'block_configurable_reports');
+            $chooseoption = ['' => get_string('choose')];
+            $bindingcolumnoptions = !empty($sourcecolumnoptions) ? ($chooseoption + $sourcecolumnoptions) : [];
+            $modeoptions = filter_params::get_mode_options();
+            $this->add_filter_binding_groups($mform, $filteroptions, $bindingcolumnoptions, $modeoptions);
+            $mform->addElement('hidden', 'filterbindingcount', count($filteroptions));
+            $mform->setType('filterbindingcount', PARAM_INT);
         }
 
         $pluginclass->add_filter_config_action_buttons($this, $this->_customdata);
+    }
+
+    /**
+     * Add one form group per child report filter binding.
+     *
+     * @param MoodleQuickForm $mform
+     * @param array<string, string> $filteroptions
+     * @param array<string, string> $sourcecolumnoptions
+     * @param array<string, string> $modeoptions
+     * @return void
+     */
+    protected function add_filter_binding_groups($mform, array $filteroptions, array $sourcecolumnoptions,
+            array $modeoptions): void {
+        $i = 0;
+        foreach ($filteroptions as $paramname => $filterlabel) {
+            $targetfield = 'targetfilter' . $i;
+            $modefield = 'mode' . $i;
+            $sourcefield = 'sourcecolumn' . $i;
+            $constantfield = 'constantvalue' . $i;
+
+            $mform->addElement('hidden', $targetfield, $paramname);
+            $mform->setType($targetfield, PARAM_RAW);
+
+            $groupelements = [];
+            $groupelements[] = $mform->createElement('static', 'filterlabel' . $i, '', $filterlabel);
+            $groupelements[] = $mform->createElement('select', $modefield, '', $modeoptions);
+            if (!empty($sourcecolumnoptions)) {
+                $groupelements[] = $mform->createElement('select', $sourcefield, '', $sourcecolumnoptions);
+            } else {
+                $groupelements[] = $mform->createElement('text', $sourcefield, '', ['size' => 30]);
+            }
+            $groupelements[] = $mform->createElement('text', $constantfield, '', ['size' => 30]);
+
+            $mform->addGroup(
+                $groupelements,
+                'filterbindinggroup' . $i,
+                get_string('chainfilterbindingheader', 'block_configurable_reports', $i + 1),
+                html_writer::span(' | ', 'px-2'),
+                false
+            );
+            $mform->setType($modefield, PARAM_ALPHA);
+            $mform->setType($sourcefield, PARAM_RAW);
+            $mform->setType($constantfield, PARAM_RAW);
+            $mform->setDefault($modefield, filter_params::MODE_EMPTY);
+
+            $mform->hideIf($sourcefield, $modefield, 'neq', filter_params::MODE_COLUMN);
+            $mform->hideIf($constantfield, $modefield, 'neq', filter_params::MODE_CONSTANT);
+
+            $i++;
+        }
     }
 
     /**
@@ -193,57 +231,6 @@ class reportchain_form extends moodleform {
             $url->param($name, $value);
         }
         return $url;
-    }
-
-    /**
-     * Add one form group per column-to-filter mapping.
-     *
-     * @param MoodleQuickForm $mform
-     * @param int $mappingcount
-     * @param array<string, string> $filteroptions
-     * @param array<string, string> $sourcecolumnoptions
-     * @return void
-     */
-    protected function add_mapping_groups($mform, int $mappingcount, array $filteroptions, array $sourcecolumnoptions = []): void {
-        for ($i = 0; $i < $mappingcount; $i++) {
-            $sourcefield = 'sourcecolumn' . $i;
-            $targetfield = 'targetfilter' . $i;
-            $groupelements = [];
-            if (!empty($sourcecolumnoptions)) {
-                $groupelements[] = $mform->createElement('select', $sourcefield, '', $sourcecolumnoptions);
-            } else {
-                $groupelements[] = $mform->createElement('text', $sourcefield, '', ['size' => 30]);
-            }
-            if (!empty($filteroptions)) {
-                $groupelements[] = $mform->createElement('select', $targetfield, '', $filteroptions);
-            } else {
-                $groupelements[] = $mform->createElement('text', $targetfield, '', ['size' => 30]);
-            }
-
-            $mform->addGroup(
-                $groupelements,
-                'mappinggroup' . $i,
-                get_string('chainmappingheader', 'block_configurable_reports', $i + 1),
-                html_writer::span(' → ', 'px-2'),
-                false
-            );
-            $mform->setType($sourcefield, PARAM_RAW);
-            $mform->setType($targetfield, PARAM_RAW);
-
-            if ($mappingcount > 1 && !empty($this->_customdata['formbaseurl'])) {
-                $removeurl = $this->append_chain_url_params(new moodle_url($this->_customdata['formbaseurl'], [
-                    'removemapping' => $i,
-                    'mappingcount' => $mappingcount,
-                    'childreportid' => (int) ($this->_customdata['storedchildreportid'] ?? optional_param('childreportid', 0, PARAM_INT)),
-                    'sesskey' => sesskey(),
-                ]));
-                $mform->addElement('static', 'removemapping' . $i, '',
-                    html_writer::link('#', get_string('chainremovemapping', 'block_configurable_reports'), [
-                        'class' => 'chain-remove-mapping small text-muted',
-                        'onclick' => $this->build_chain_navigation_onclick($removeurl->out(false)),
-                    ]));
-            }
-        }
     }
 
     /**
@@ -295,23 +282,33 @@ class reportchain_form extends moodleform {
             $errors['rowkeycolumns'] = get_string('chainerror_norowkeys', 'block_configurable_reports');
         }
 
-        $hasmapping = false;
-        $mappingcount = max(1, (int) ($data['mappingcount'] ?? 1));
-        for ($i = 0; $i < $mappingcount; $i++) {
-            $source = $this->read_mapping_field((object) $data, 'sourcecolumn', $i);
-            $target = $this->read_mapping_field((object) $data, 'targetfilter', $i);
-            if ($source !== '' && $target !== '') {
-                $hasmapping = true;
-                if ($hascolumnmetadata && !output_columns::is_known_column($sourcereport, $source)) {
-                    $errors['mappinggroup' . $i] = get_string('chainerror_unknowncolumn', 'block_configurable_reports', $source);
+        if (!empty($filteroptions)) {
+            $bindingcount = max(0, (int) ($data['filterbindingcount'] ?? count($filteroptions)));
+            for ($i = 0; $i < $bindingcount; $i++) {
+                $target = $this->read_binding_field((object) $data, 'targetfilter', $i);
+                $mode = $this->read_binding_field((object) $data, 'mode', $i);
+                if ($target === '' || !array_key_exists($target, $filteroptions)) {
+                    $errors['filterbindinggroup' . $i] = get_string('chainerror_unknownfilter', 'block_configurable_reports', $target);
+                    continue;
                 }
-                if (!empty($filteroptions) && !array_key_exists($target, $filteroptions)) {
-                    $errors['mappinggroup' . $i] = get_string('chainerror_unknownfilter', 'block_configurable_reports', $target);
+                if (!filter_params::is_valid_mode($mode)) {
+                    $errors['filterbindinggroup' . $i] = get_string('chainerror_invalidfiltermode', 'block_configurable_reports', $target);
+                    continue;
+                }
+                if ($mode === filter_params::MODE_COLUMN) {
+                    $source = $this->read_binding_field((object) $data, 'sourcecolumn', $i);
+                    if ($source === '') {
+                        $errors['filterbindinggroup' . $i] = get_string('chainerror_nocolumnsource', 'block_configurable_reports', $target);
+                    } else if ($hascolumnmetadata && !output_columns::is_known_column($sourcereport, $source)) {
+                        $errors['filterbindinggroup' . $i] = get_string('chainerror_unknowncolumn', 'block_configurable_reports', $source);
+                    }
+                } else if ($mode === filter_params::MODE_CONSTANT) {
+                    $constant = $this->read_binding_field((object) $data, 'constantvalue', $i);
+                    if ($constant === '') {
+                        $errors['filterbindinggroup' . $i] = get_string('chainerror_noconstantvalue', 'block_configurable_reports', $target);
+                    }
                 }
             }
-        }
-        if (!$hasmapping) {
-            $errors['mappinggroup0'] = get_string('chainerror_nomappings', 'block_configurable_reports');
         }
 
         return $errors;
@@ -336,20 +333,20 @@ class reportchain_form extends moodleform {
     }
 
     /**
-     * Read a mapping field from form data (top-level or inside a form group).
+     * Read a filter binding field from form data (top-level or inside a form group).
      *
      * @param object $data
      * @param string $field
      * @param int $index
      * @return string
      */
-    protected function read_mapping_field(object $data, string $field, int $index): string {
+    protected function read_binding_field(object $data, string $field, int $index): string {
         $key = $field . $index;
         if (property_exists($data, $key)) {
             return trim((string) $data->$key);
         }
 
-        $groupkey = 'mappinggroup' . $index;
+        $groupkey = 'filterbindinggroup' . $index;
         if (property_exists($data, $groupkey)) {
             $group = $data->$groupkey;
             if (is_array($group) && array_key_exists($key, $group)) {
@@ -364,28 +361,58 @@ class reportchain_form extends moodleform {
     }
 
     /**
-     * Expand stored mappings for form fields.
+     * Expand stored filter bindings for form fields.
      *
      * @param object $data
      * @return void
      */
     public function set_data($data): void {
         $data = (object) $data;
-        if (!empty($data->mappings)) {
-            $index = 0;
-            foreach ($data->mappings as $mapping) {
-                $mapping = (object) $mapping;
-                $sourcefield = 'sourcecolumn' . $index;
-                $targetfield = 'targetfilter' . $index;
-                $data->$sourcefield = $mapping->sourcecolumn ?? '';
-                $data->$targetfield = $mapping->targetfilter ?? '';
-                $index++;
+        $childreportid = (int) ($data->childreportid ?? $this->_customdata['storedchildreportid'] ?? 0);
+        $filteroptions = [];
+        if ($childreportid > 0) {
+            $filteroptions = $this->_customdata['pluginclass']->get_child_filter_options($childreportid);
+        }
+
+        $bindingsbytarget = [];
+        $rawbindings = $data->filterbindings ?? $data->mappings ?? [];
+        if (!empty($rawbindings)) {
+            foreach ($rawbindings as $binding) {
+                $binding = (object) $binding;
+                $target = trim((string) ($binding->targetfilter ?? ''));
+                if ($target === '') {
+                    continue;
+                }
+                $bindingsbytarget[$target] = $binding;
             }
-            $data->mappingcount = $index;
         }
-        if (!empty($this->_customdata['mappingcount'])) {
-            $data->mappingcount = max((int) ($data->mappingcount ?? 1), (int) $this->_customdata['mappingcount']);
+
+        $index = 0;
+        foreach ($filteroptions as $paramname => $unused) {
+            $binding = $bindingsbytarget[$paramname] ?? null;
+            $data->{'targetfilter' . $index} = $paramname;
+            if ($binding !== null) {
+                $mode = $binding->mode ?? filter_params::MODE_COLUMN;
+                if (!filter_params::is_valid_mode($mode)) {
+                    $mode = filter_params::MODE_COLUMN;
+                }
+                if (!isset($binding->mode) && isset($binding->sourcecolumn)) {
+                    $mode = filter_params::MODE_COLUMN;
+                }
+                $data->{'mode' . $index} = $mode;
+                $data->{'sourcecolumn' . $index} = $binding->sourcecolumn ?? '';
+                $data->{'constantvalue' . $index} = $binding->constantvalue ?? '';
+            } else {
+                $data->{'mode' . $index} = filter_params::MODE_EMPTY;
+                $data->{'sourcecolumn' . $index} = '';
+                $data->{'constantvalue' . $index} = '';
+            }
+            $index++;
         }
+        if ($index > 0) {
+            $data->filterbindingcount = $index;
+        }
+
         if (!empty($data->rowkeycolumns) && is_array($data->rowkeycolumns)) {
             if (!output_columns::has_metadata($this->_customdata['report'])) {
                 $data->rowkeycolumns = implode(', ', $data->rowkeycolumns);
@@ -395,36 +422,53 @@ class reportchain_form extends moodleform {
     }
 
     /**
-     * Prepare mappings for storage.
+     * Prepare filter bindings for storage.
      *
      * @param object $data
      * @return object
      */
-    public function prepare_mapping_data(object $data): object {
+    public function prepare_filterbinding_data(object $data): object {
         if (!isset($data->enabled)) {
             $data->enabled = 0;
         }
         if (isset($data->rowkeycolumns)) {
             $data->rowkeycolumns = $this->normalise_rowkey_submission($data->rowkeycolumns);
         }
-        $mappings = [];
-        $mappingcount = max(1, (int) ($data->mappingcount ?? 1));
-        for ($i = 0; $i < $mappingcount; $i++) {
-            $source = $this->read_mapping_field($data, 'sourcecolumn', $i);
-            $target = $this->read_mapping_field($data, 'targetfilter', $i);
-            if ($source === '' || $target === '') {
+        $bindings = [];
+        $bindingcount = max(0, (int) ($data->filterbindingcount ?? 0));
+        for ($i = 0; $i < $bindingcount; $i++) {
+            $target = $this->read_binding_field($data, 'targetfilter', $i);
+            $mode = $this->read_binding_field($data, 'mode', $i);
+            if ($target === '' || !filter_params::is_valid_mode($mode)) {
                 continue;
             }
-            $mappings[] = (object) [
-                'sourcecolumn' => $source,
+            $bindings[] = (object) [
                 'targetfilter' => $target,
+                'mode' => $mode,
+                'sourcecolumn' => $this->read_binding_field($data, 'sourcecolumn', $i),
+                'constantvalue' => $this->read_binding_field($data, 'constantvalue', $i),
             ];
         }
-        $data->mappings = $mappings;
-        for ($i = 0; $i < $mappingcount; $i++) {
-            unset($data->{'sourcecolumn' . $i}, $data->{'targetfilter' . $i}, $data->{'mappinggroup' . $i});
+        $data->filterbindings = $bindings;
+        for ($i = 0; $i < $bindingcount; $i++) {
+            unset(
+                $data->{'targetfilter' . $i},
+                $data->{'mode' . $i},
+                $data->{'sourcecolumn' . $i},
+                $data->{'constantvalue' . $i},
+                $data->{'filterbindinggroup' . $i}
+            );
         }
-        unset($data->mappingcount, $data->configstep, $data->continueconfig);
+        unset($data->filterbindingcount, $data->configstep, $data->continueconfig);
         return $data;
+    }
+
+    /**
+     * @deprecated Use prepare_filterbinding_data().
+     * @param object $data
+     * @return object
+     */
+    public function prepare_mapping_data(object $data): object {
+        return $this->prepare_filterbinding_data($data);
     }
 }

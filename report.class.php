@@ -318,6 +318,9 @@ abstract class report_base {
      * @return bool
      */
     public function filters_submitted(): bool {
+        if (\block_configurable_reports\chain\filter_injection::has_any_for_report((int) $this->config->id)) {
+            return true;
+        }
         return optional_param('filterssubmitted', 0, PARAM_INT) === 1
             || $this->has_any_filter_param_in_request();
     }

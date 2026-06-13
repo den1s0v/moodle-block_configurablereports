@@ -19,6 +19,7 @@ namespace block_configurable_reports;
 defined('MOODLE_INTERNAL') || die();
 
 use block_configurable_reports\chain\definition;
+use block_configurable_reports\chain\filter_params;
 
 /**
  * Tests for chain definition helpers.
@@ -63,7 +64,11 @@ class chain_definition_test extends \advanced_testcase {
                 'enabled' => 1,
                 'childreportid' => 5,
                 'rowkeycolumns' => ['groupid'],
-                'mappings' => [(object) ['sourcecolumn' => 'groupid', 'targetfilter' => 'filter_searchtext']],
+                'filterbindings' => [(object) [
+                    'targetfilter' => 'filter_searchtext',
+                    'mode' => filter_params::MODE_COLUMN,
+                    'sourcecolumn' => 'groupid',
+                ]],
             ],
         ];
         $result = definition::validate_element($parent, $element);
@@ -71,9 +76,24 @@ class chain_definition_test extends \advanced_testcase {
     }
 
     /**
-     * Mapping should read parent row values by column name.
+     * Legacy mappings should migrate to column-mode filter bindings.
      */
-    public function test_build_filter_params_for_row(): void {
+    public function test_normalise_filterbindings_migrates_mappings(): void {
+        $formdata = definition::normalise_formdata((object) [
+            'mappings' => [(object) ['sourcecolumn' => 'groupid', 'targetfilter' => 'filter_searchtext']],
+        ]);
+        $this->assertCount(1, $formdata->filterbindings);
+        $binding = $formdata->filterbindings[0];
+        $this->assertSame('filter_searchtext', $binding->targetfilter);
+        $this->assertSame(filter_params::MODE_COLUMN, $binding->mode);
+        $this->assertSame('groupid', $binding->sourcecolumn);
+        $this->assertObjectNotHasProperty('mappings', $formdata);
+    }
+
+    /**
+     * Column binding should read parent row values by column name.
+     */
+    public function test_build_child_filter_params_column_mode(): void {
         $table = (object) [
             'head' => ['groupid', 'groupname'],
             'data' => [
@@ -81,10 +101,68 @@ class chain_definition_test extends \advanced_testcase {
             ],
         ];
         $formdata = definition::normalise_formdata((object) [
-            'mappings' => [(object) ['sourcecolumn' => 'groupid', 'targetfilter' => 'filter_searchtext']],
+            'filterbindings' => [(object) [
+                'targetfilter' => 'filter_searchtext',
+                'mode' => filter_params::MODE_COLUMN,
+                'sourcecolumn' => 'groupid',
+            ]],
         ]);
-        $params = definition::build_filter_params_for_row($table, 0, $formdata);
+        $params = definition::build_child_filter_params_for_row($table, 0, $formdata);
         $this->assertSame('42', $params['filter_searchtext']);
+    }
+
+    /**
+     * Empty and constant binding modes should inject expected values.
+     */
+    public function test_build_child_filter_params_empty_and_constant_modes(): void {
+        $table = (object) [
+            'head' => ['groupid'],
+            'data' => [['42']],
+        ];
+        $formdata = definition::normalise_formdata((object) [
+            'filterbindings' => [
+                (object) [
+                    'targetfilter' => 'filter_searchtext',
+                    'mode' => filter_params::MODE_EMPTY,
+                ],
+                (object) [
+                    'targetfilter' => 'filter_courses',
+                    'mode' => filter_params::MODE_CONSTANT,
+                    'constantvalue' => '2024-1',
+                ],
+            ],
+        ]);
+        $params = definition::build_child_filter_params_for_row($table, 0, $formdata);
+        $this->assertSame('', $params['filter_searchtext']);
+        $this->assertSame('2024-1', $params['filter_courses']);
+    }
+
+    /**
+     * Rows with identical column bindings should group for deduplicated export.
+     */
+    public function test_group_row_indexes_by_column_mapping(): void {
+        $table = (object) [
+            'head' => ['courseid', 'userid'],
+            'data' => [
+                ['10', '1'],
+                ['10', '2'],
+                ['20', '3'],
+            ],
+        ];
+        $formdata = definition::normalise_formdata((object) [
+            'filterbindings' => [(object) [
+                'targetfilter' => 'filter_courses',
+                'mode' => filter_params::MODE_COLUMN,
+                'sourcecolumn' => 'courseid',
+            ]],
+        ]);
+        $groups = definition::group_row_indexes_by_column_mapping($table, [0, 1, 2], $formdata);
+        $this->assertCount(2, $groups);
+        $counts = array_map(function($group) {
+            return $group->count;
+        }, $groups);
+        sort($counts);
+        $this->assertSame([1, 2], $counts);
     }
 
     /**
@@ -104,7 +182,11 @@ class chain_definition_test extends \advanced_testcase {
         ];
         $formdata = definition::normalise_formdata((object) [
             'rowkeycolumns' => ['groupid'],
-            'mappings' => [(object) ['sourcecolumn' => 'unknown_col', 'targetfilter' => 'filter_searchtext']],
+            'filterbindings' => [(object) [
+                'targetfilter' => 'filter_searchtext',
+                'mode' => filter_params::MODE_COLUMN,
+                'sourcecolumn' => 'unknown_col',
+            ]],
         ]);
 
         $result = definition::validate_source_columns($parent, $formdata);

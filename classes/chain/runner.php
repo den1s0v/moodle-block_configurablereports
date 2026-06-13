@@ -170,16 +170,21 @@ class runner {
         $exporter = new exporter();
         $files = [];
         $rownum = 0;
+        $groups = definition::group_row_indexes_by_column_mapping($table, $rowindexes, $this->formdata);
         try {
-            foreach ($rowindexes as $rowindex) {
+            foreach ($groups as $group) {
                 $rownum++;
+                $rowindex = $group->rowindex;
                 $keyvalues = definition::extract_row_key_values($table, $rowindex, $this->formdata->rowkeycolumns);
                 $rowlabel = implode(' / ', array_filter($keyvalues));
                 if ($rowlabel === '') {
                     $rowlabel = get_string('chainexportrownumber', 'block_configurable_reports', $rownum);
                 }
+                if ($group->count > 1) {
+                    $rowlabel .= ' ' . get_string('chainexportmergedrows', 'block_configurable_reports', $group->count);
+                }
 
-                $filterparams = definition::build_filter_params_for_row($table, $rowindex, $this->formdata);
+                $filterparams = definition::build_child_filter_params_for_row($table, $rowindex, $this->formdata);
                 $childfinal = $this->execute_child_report($childreport, $filterparams);
 
                 if (!definition::finalreport_has_data($childfinal)) {

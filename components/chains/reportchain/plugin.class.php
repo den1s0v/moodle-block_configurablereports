@@ -16,6 +16,9 @@
 
 defined('MOODLE_INTERNAL') || die;
 require_once($CFG->dirroot . '/blocks/configurable_reports/plugin.class.php');
+require_once($CFG->dirroot . '/blocks/configurable_reports/classes/chain/filter_params.php');
+
+use block_configurable_reports\chain\filter_params;
 
 /**
  * Report chain plugin.
@@ -57,14 +60,29 @@ class plugin_reportchain extends plugin_base {
 
         $childname = format_string($child->name);
         $mappingparts = [];
-        foreach ($data->mappings as $mapping) {
-            $mapping = (object) $mapping;
-            $source = trim((string) ($mapping->sourcecolumn ?? ''));
-            $target = trim((string) ($mapping->targetfilter ?? ''));
-            if ($source === '' || $target === '') {
+        foreach ($data->filterbindings as $binding) {
+            $binding = (object) $binding;
+            $target = trim((string) ($binding->targetfilter ?? ''));
+            if ($target === '') {
                 continue;
             }
-            $mappingparts[] = s($source) . ' → ' . s($target);
+            $mode = $binding->mode ?? filter_params::MODE_EMPTY;
+            switch ($mode) {
+                case filter_params::MODE_COLUMN:
+                    $source = trim((string) ($binding->sourcecolumn ?? ''));
+                    if ($source !== '') {
+                        $mappingparts[] = s($source) . ' → ' . s($target);
+                    }
+                    break;
+                case filter_params::MODE_CONSTANT:
+                    $constant = (string) ($binding->constantvalue ?? '');
+                    $mappingparts[] = "'" . s($constant) . "' → " . s($target);
+                    break;
+                case filter_params::MODE_EMPTY:
+                default:
+                    $mappingparts[] = '∅ → ' . s($target);
+                    break;
+            }
         }
 
         $a = (object) [
@@ -111,55 +129,6 @@ class plugin_reportchain extends plugin_base {
             return [];
         }
 
-        $components = cr_unserialize($child->components);
-        $filters = $components['filters']['elements'] ?? [];
-        $options = [];
-
-        foreach ($filters as $filter) {
-            $pluginname = $filter['pluginname'] ?? '';
-            if ($pluginname === '') {
-                continue;
-            }
-            $formdata = (object) ($filter['formdata'] ?? new \stdClass());
-            $paramname = $this->guess_filter_param_name($pluginname, $formdata);
-            if ($paramname !== '') {
-                $label = get_string($pluginname, 'block_configurable_reports', null, true);
-                if ($label === '[[' . $pluginname . ']]') {
-                    $label = $pluginname;
-                }
-                $options[$paramname] = $paramname . ' (' . $label . ')';
-            }
-        }
-
-        return $options;
-    }
-
-    /**
-     * Guess request parameter name for a filter plugin.
-     *
-     * @param string $pluginname
-     * @param object $formdata
-     * @return string
-     */
-    protected function guess_filter_param_name(string $pluginname, object $formdata): string {
-        switch ($pluginname) {
-            case 'searchtext':
-                if (!empty($formdata->idnumber)) {
-                    return 'filter_searchtext_' . $formdata->idnumber;
-                }
-                return 'filter_searchtext';
-            case 'fcoursefield':
-                return 'filter_fcoursefield';
-            case 'fuserfield':
-                return 'filter_fuserfield';
-            case 'fsearchuserfield':
-                return 'filter_fsearchuserfield';
-            case 'coursecategories':
-                return 'filter_coursecategories';
-            case 'startendtime':
-                return 'filter_starttime';
-            default:
-                return 'filter_' . $pluginname;
-        }
+        return filter_params::get_child_filter_options($child);
     }
 }

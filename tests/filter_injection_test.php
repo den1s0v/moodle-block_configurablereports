@@ -34,6 +34,8 @@ class filter_injection_test extends \advanced_testcase {
     public function test_injection_scope_per_report(): void {
         filter_injection::clear_all();
         filter_injection::set(10, ['filter_courses' => '42']);
+        $this->assertTrue(filter_injection::has_any_for_report(10));
+        $this->assertFalse(filter_injection::has_any_for_report(11));
         $this->assertTrue(filter_injection::has(10, 'filter_courses'));
         $this->assertSame('42', filter_injection::get(10, 'filter_courses'));
         $this->assertFalse(filter_injection::has(11, 'filter_courses'));

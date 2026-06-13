@@ -65,6 +65,16 @@ class filter_injection {
     }
 
     /**
+     * Whether any parameters were injected for this report.
+     *
+     * @param int $reportid
+     * @return bool
+     */
+    public static function has_any_for_report(int $reportid): bool {
+        return !empty(self::$params[$reportid]);
+    }
+
+    /**
      * Clear injected parameters for a report.
      *
      * @param int $reportid
