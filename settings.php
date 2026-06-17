@@ -222,5 +222,16 @@ if ($ADMIN->fulltree) {
         )
     );
 
+    $settings->add(
+        new admin_setting_configtext(
+            'block_configurable_reports/chainexportstalerunminutes',
+            get_string('chainexportstalerunminutes', 'block_configurable_reports'),
+            get_string('chainexportstalerunminutes_help', 'block_configurable_reports'),
+            '120',
+            PARAM_INT,
+            6
+        )
+    );
+
 
 }

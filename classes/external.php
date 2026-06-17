@@ -186,6 +186,7 @@ class external extends external_api {
             'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
             'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
             'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
+            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
             'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
             'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
         ]);
@@ -250,9 +251,76 @@ class external extends external_api {
             'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
             'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
             'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
+            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
             'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
             'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
             'cancelled' => new external_value(PARAM_BOOL, 'Whether cancel was accepted'),
+        ]);
+    }
+
+    /**
+     * dismiss_chain_export parameters.
+     *
+     * @return external_function_parameters
+     */
+    public static function dismiss_chain_export_parameters(): external_function_parameters {
+        return new external_function_parameters([
+            'jobid' => new external_value(PARAM_INT, 'Export job id', VALUE_REQUIRED),
+        ]);
+    }
+
+    /**
+     * Dismiss a stuck or finished export job so a new export can start.
+     *
+     * @param int $jobid
+     * @return array
+     */
+    public static function dismiss_chain_export(int $jobid): array {
+        global $USER;
+
+        self::validate_parameters(self::dismiss_chain_export_parameters(), ['jobid' => $jobid]);
+
+        $job = export_job::get($jobid);
+        if (!$job) {
+            throw new \moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+        }
+
+        $report = $GLOBALS['DB']->get_record('block_configurable_reports', ['id' => (int) $job->parentreportid], '*', MUST_EXIST);
+        if ((int) $report->courseid === SITEID) {
+            $context = context_system::instance();
+        } else {
+            $context = context_course::instance((int) $job->courseid ?: (int) $report->courseid);
+        }
+        self::validate_context($context);
+        require_capability('block/configurable_reports:viewreports', $context);
+
+        $dismissed = export_job::dismiss_job($jobid, (int) $USER->id);
+        $job = export_job::get($jobid);
+        return export_job::build_status_payload($job, (int) $USER->id) + ['dismissed' => $dismissed];
+    }
+
+    /**
+     * dismiss_chain_export return structure.
+     *
+     * @return external_single_structure
+     */
+    public static function dismiss_chain_export_returns(): external_single_structure {
+        return new external_single_structure([
+            'jobid' => new external_value(PARAM_INT, 'Job id'),
+            'status' => new external_value(PARAM_ALPHA, 'Job status'),
+            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
+            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
+            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
+            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
+            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
+            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
+            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
+            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
+            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
+            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
+            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
+            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
+            'dismissed' => new external_value(PARAM_BOOL, 'Whether dismiss was accepted'),
         ]);
     }
 

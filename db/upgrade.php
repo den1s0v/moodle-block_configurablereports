@@ -234,5 +234,10 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2027061402, 'block', 'configurable_reports');
     }
 
+    if ($oldversion < 2027061403) {
+        set_config('chainexportstalerunminutes', 120, 'block_configurable_reports');
+        upgrade_plugin_savepoint(true, 2027061403, 'block', 'configurable_reports');
+    }
+
     return true;
 }

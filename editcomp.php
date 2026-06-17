@@ -331,6 +331,16 @@ if ($elements) {
                         'sesskey' => sesskey(),
                     ]);
                     $actions .= ' ' . html_writer::link($downloadurl, get_string('chainexportdownloadzip', 'block_configurable_reports'));
+                } else if (export_job::is_dismissable($job)) {
+                    $dismissurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
+                        'id' => $id,
+                        'chainid' => $job->chainid,
+                        'courseid' => $courseid,
+                        'jobid' => (int) $job->id,
+                        'dismissjob' => 1,
+                        'sesskey' => sesskey(),
+                    ]);
+                    $actions .= ' ' . html_writer::link($dismissurl, get_string('chainexportdismiss', 'block_configurable_reports'));
                 }
                 $jobtable->data[] = [
                     s($chainlabel),

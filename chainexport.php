@@ -158,6 +158,7 @@ function block_configurable_reports_render_chainexport_progress(
     echo html_writer::start_div('chain-export-progress mb-3', [
         'data-region' => 'chain-export-progress',
         'data-jobid' => (int) $job->id,
+        'data-newexporturl' => $newexporturl->out(false),
     ]);
     echo html_writer::tag('p', get_string('chainexportprogressheading', 'block_configurable_reports'), ['class' => 'h4']);
     echo html_writer::tag('p', $statustext, ['data-statustext' => 1, 'class' => 'chainexport-statustext']);
@@ -208,7 +209,19 @@ function block_configurable_reports_render_chainexport_progress(
             get_string('chainexportcancelrequest', 'block_configurable_reports'),
             ['type' => 'button', 'class' => 'btn btn-secondary mb-2', 'data-cancelbutton' => 1]
         );
+    } else if (!empty($status['dismissable'])) {
+        echo html_writer::div(
+            get_string('chainexportnodownload', 'block_configurable_reports'),
+            'alert alert-info chainexport-nodownload mb-2' . ($status['downloadable'] ? ' d-none' : ''),
+            ['data-nodownload' => 1]
+        );
     }
+    $dismissclass = !empty($status['dismissable']) ? 'btn btn-warning mb-2' : 'btn btn-warning mb-2 d-none';
+    echo ' ' . html_writer::tag(
+        'button',
+        get_string('chainexportdismiss', 'block_configurable_reports'),
+        ['type' => 'button', 'class' => $dismissclass, 'data-dismissbutton' => 1]
+    );
     echo html_writer::empty_tag('hr');
     echo $output->single_button($newexporturl, get_string('chainexportnewexport', 'block_configurable_reports'), 'get');
     echo html_writer::end_div();
@@ -230,6 +243,7 @@ $chainid = optional_param('chainid', '', PARAM_ALPHANUMEXT);
 $courseid = optional_param('courseid', null, PARAM_INT);
 $jobid = optional_param('jobid', 0, PARAM_INT);
 $newexport = optional_param('newexport', 0, PARAM_BOOL);
+$dismissjob = optional_param('dismissjob', 0, PARAM_BOOL);
 $downloadzip = optional_param('downloadzip', 0, PARAM_BOOL);
 $exportdone = optional_param('exportdone', 0, PARAM_BOOL);
 $exportformat = optional_param('exportformat', '', PARAM_ALPHA);
@@ -270,6 +284,23 @@ $reportclass = new $reportclassname($report);
 
 if (!$reportclass->check_permissions($USER->id, $context)) {
     throw new moodle_exception('badpermissions', 'block_configurable_reports');
+}
+
+if ($dismissjob && $jobid) {
+    require_sesskey();
+    $job = export_job::get($jobid);
+    if (!$job || (int) $job->userid !== (int) $USER->id || (int) $job->parentreportid !== (int) $id) {
+        throw new moodle_exception('badpermissions', 'block_configurable_reports');
+    }
+    if (!export_job::dismiss_job($jobid, (int) $USER->id)) {
+        throw new moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+    }
+    redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+        'id' => $id,
+        'chainid' => $job->chainid,
+        'courseid' => $courseid,
+        'newexport' => 1,
+    ], $filterparams)), get_string('chainexportdismissed', 'block_configurable_reports'));
 }
 
 if ($downloadzip && $jobid) {
@@ -394,6 +425,7 @@ if ($chainid) {
     }
 
     if ($jobid) {
+        export_job::reclaim_stale_running_jobs((int) $id);
         $job = export_job::get($jobid);
         if (!$job || (int) $job->userid !== (int) $USER->id || $job->chainid !== $chainid
             || (int) $job->parentreportid !== (int) $id) {

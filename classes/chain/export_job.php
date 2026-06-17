@@ -68,6 +68,8 @@ class export_job {
         }
         $now = time();
 
+        self::prepare_for_new_job($userid, (int) $parentreport->id, (string) $chainelement['id']);
+
         $record = (object) [
             'userid' => $userid,
             'parentreportid' => (int) $parentreport->id,
@@ -134,6 +136,9 @@ class export_job {
      */
     public static function get_resumable_for_user(int $userid, int $parentreportid, string $chainid): ?object {
         global $DB;
+
+        self::reclaim_stale_running_jobs($parentreportid);
+
         $now = time();
         $sql = "SELECT *
                   FROM {" . self::TABLE . "}
@@ -154,8 +159,16 @@ class export_job {
             'completed' => self::STATUS_COMPLETED,
             'partial' => self::STATUS_PARTIAL,
             'now' => $now,
-        ], 0, 1);
-        return $jobs ? reset($jobs) : null;
+        ]);
+        foreach ($jobs as $job) {
+            if (in_array($job->status, [self::STATUS_QUEUED, self::STATUS_RUNNING], true)) {
+                return $job;
+            }
+            if (self::is_downloadable($job)) {
+                return $job;
+            }
+        }
+        return null;
     }
 
     /**
@@ -167,25 +180,36 @@ class export_job {
      */
     public static function get_user_jobs_for_report(int $userid, int $parentreportid): array {
         global $DB;
+
+        self::reclaim_stale_running_jobs($parentreportid);
+
         $now = time();
         $sql = "SELECT *
                   FROM {" . self::TABLE . "}
                  WHERE userid = :userid
                    AND parentreportid = :parentreportid
                    AND (
-                        status IN (:queued, :running)
+                        status IN (:queued, :running, :failed, :cancelled)
                         OR (status IN (:completed, :partial) AND zipdownloaded = 0 AND timeexpires > :now)
                    )
               ORDER BY timecreated DESC";
-        return $DB->get_records_sql($sql, [
+        $jobs = $DB->get_records_sql($sql, [
             'userid' => $userid,
             'parentreportid' => $parentreportid,
             'queued' => self::STATUS_QUEUED,
             'running' => self::STATUS_RUNNING,
+            'failed' => self::STATUS_FAILED,
+            'cancelled' => self::STATUS_CANCELLED,
             'completed' => self::STATUS_COMPLETED,
             'partial' => self::STATUS_PARTIAL,
             'now' => $now,
         ]);
+        return array_filter($jobs, function(object $job): bool {
+            if (in_array($job->status, [self::STATUS_QUEUED, self::STATUS_RUNNING, self::STATUS_FAILED, self::STATUS_CANCELLED], true)) {
+                return true;
+            }
+            return self::is_downloadable($job);
+        });
     }
 
     /**
@@ -250,6 +274,8 @@ class export_job {
         if (!$job || in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL, self::STATUS_FAILED, self::STATUS_CANCELLED], true)) {
             return;
         }
+
+        self::reclaim_stale_running_jobs((int) $job->parentreportid);
 
         if ($job->status === self::STATUS_QUEUED) {
             $running = self::get_running_for_parent((int) $job->parentreportid);
@@ -339,6 +365,165 @@ class export_job {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Whether a finished job has a ZIP archive ready to download.
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function is_downloadable(object $job): bool {
+        if (!in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true)) {
+            return false;
+        }
+        if ((int) $job->timeexpires < time()) {
+            return false;
+        }
+        $exported = json_decode($job->exported ?? '[]', true) ?: [];
+        return count($exported) > 0 && self::resolve_zip_path($job) !== null;
+    }
+
+    /**
+     * Whether the user can dismiss this job from active lists / resume.
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function is_dismissable(object $job): bool {
+        if (!empty($job->zipdownloaded)) {
+            return false;
+        }
+        if (in_array($job->status, [self::STATUS_FAILED, self::STATUS_CANCELLED], true)) {
+            return true;
+        }
+        if (in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true)) {
+            return !self::is_downloadable($job);
+        }
+        if ($job->status === self::STATUS_RUNNING) {
+            return self::is_running_stale($job);
+        }
+        return $job->status === self::STATUS_QUEUED;
+    }
+
+    /**
+     * @param object $job
+     * @return bool
+     */
+    public static function is_running_stale(object $job): bool {
+        if ($job->status !== self::STATUS_RUNNING || empty($job->timestarted)) {
+            return false;
+        }
+        $cutoff = time() - self::get_stale_run_minutes() * 60;
+        return (int) $job->timestarted < $cutoff;
+    }
+
+    /**
+     * @return int
+     */
+    public static function get_stale_run_minutes(): int {
+        $mins = (int) get_config('block_configurable_reports', 'chainexportstalerunminutes');
+        return $mins > 0 ? $mins : 120;
+    }
+
+    /**
+     * Mark long-running jobs as failed so the queue can continue.
+     *
+     * @param int $parentreportid
+     * @return void
+     */
+    public static function reclaim_stale_running_jobs(int $parentreportid): void {
+        global $DB;
+
+        $cutoff = time() - self::get_stale_run_minutes() * 60;
+        $stale = $DB->get_records_select(
+            self::TABLE,
+            'parentreportid = :parentreportid AND status = :running AND timestarted > 0 AND timestarted < :cutoff',
+            [
+                'parentreportid' => $parentreportid,
+                'running' => self::STATUS_RUNNING,
+                'cutoff' => $cutoff,
+            ]
+        );
+        if (!$stale) {
+            return;
+        }
+        foreach ($stale as $job) {
+            $job->status = self::STATUS_FAILED;
+            $job->errormessage = get_string('chainexportstale', 'block_configurable_reports');
+            $job->timefinished = time();
+            $job->zipdownloaded = 1;
+            $DB->update_record(self::TABLE, $job);
+        }
+        self::dispatch_next_queued($parentreportid);
+    }
+
+    /**
+     * Clear blocking jobs before starting a new export for the same chain.
+     *
+     * @param int $userid
+     * @param int $parentreportid
+     * @param string $chainid
+     * @return void
+     */
+    public static function prepare_for_new_job(int $userid, int $parentreportid, string $chainid): void {
+        global $DB;
+
+        self::reclaim_stale_running_jobs($parentreportid);
+
+        $blocking = $DB->get_records_select(
+            self::TABLE,
+            'userid = :userid AND parentreportid = :parentreportid AND chainid = :chainid AND zipdownloaded = 0',
+            [
+                'userid' => $userid,
+                'parentreportid' => $parentreportid,
+                'chainid' => $chainid,
+            ]
+        );
+        foreach ($blocking as $job) {
+            if ($job->status === self::STATUS_QUEUED) {
+                self::cancel((int) $job->id, $userid);
+            } else if (self::is_dismissable($job)) {
+                self::dismiss_job((int) $job->id, $userid);
+            }
+        }
+    }
+
+    /**
+     * Remove a job from resume/lists (user acknowledged or abandoned export).
+     *
+     * @param int $jobid
+     * @param int $userid
+     * @return bool
+     */
+    public static function dismiss_job(int $jobid, int $userid): bool {
+        global $DB;
+
+        $job = self::get($jobid);
+        if (!$job || (int) $job->userid !== $userid || !self::is_dismissable($job)) {
+            return false;
+        }
+
+        if ($job->status === self::STATUS_QUEUED) {
+            return self::cancel($jobid, $userid);
+        }
+
+        if ($job->status === self::STATUS_RUNNING) {
+            $job->status = self::STATUS_FAILED;
+            $job->errormessage = get_string('chainexportdismissed', 'block_configurable_reports');
+            $job->timefinished = time();
+            $job->zipdownloaded = 1;
+            $DB->update_record(self::TABLE, $job);
+            self::dispatch_next_queued((int) $job->parentreportid);
+            return true;
+        }
+
+        $job->zipdownloaded = 1;
+        if (empty($job->timefinished)) {
+            $job->timefinished = time();
+        }
+        $DB->update_record(self::TABLE, $job);
+        return true;
     }
 
     /**
@@ -463,20 +648,16 @@ class export_job {
         }
 
         $zippath = self::resolve_zip_path($job);
-        $downloadable = in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true)
-            && $zippath !== null
-            && count($exported) > 0
-            && (int) $job->timeexpires > time();
+        $downloadable = self::is_downloadable($job);
 
         $progressdone = (int) $job->progressdone;
         $progresstotal = (int) $job->progresstotal;
-        $finished = in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true);
-        if ($finished && $progresstotal > 0) {
+        if ($job->status === self::STATUS_COMPLETED && $progresstotal > 0) {
             $progressdone = $progresstotal;
         }
         $progresspercent = $progresstotal > 0
             ? (int) round(($progressdone / $progresstotal) * 100)
-            : ($finished ? 100 : 0);
+            : ($job->status === self::STATUS_COMPLETED ? 100 : 0);
 
         return [
             'jobid' => (int) $job->id,
@@ -490,6 +671,7 @@ class export_job {
             'skippedcount' => count($skipped),
             'errormessage' => $job->errormessage ?? '',
             'downloadable' => $downloadable,
+            'dismissable' => self::is_dismissable($job),
             'zipfilename' => $job->zipfilename ?? '',
             'zipdownloaded' => (bool) $job->zipdownloaded,
         ];

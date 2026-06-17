@@ -333,33 +333,35 @@ class runner {
 
             if ($incremental) {
                 $cancelled = $job && export_job::is_cancel_requested($job);
-                $job->progressdone = (int) $job->progresstotal;
                 if (!empty($result->exported)) {
                     $result->zippath = $exporter->close_zip_archive();
                     $job->zippath = export_job::job_zip_path((int) $job->id);
                     $job->zipfilename = $result->zipfilename;
                     $job->timefinished = time();
-                    $job->status = ($cancelled && (int) $job->progressdone < (int) $job->progresstotal)
-                        ? export_job::STATUS_PARTIAL
-                        : export_job::STATUS_COMPLETED;
-                    if ($cancelled && (int) $job->progressdone === 0) {
-                        $job->status = export_job::STATUS_CANCELLED;
-                        temp_file_cleanup::delete_file_if_exists($result->zippath);
-                        $job->zippath = null;
+                    if ($cancelled) {
+                        $job->status = export_job::STATUS_PARTIAL;
+                    } else {
+                        $job->progressdone = (int) $job->progresstotal;
+                        $job->status = export_job::STATUS_COMPLETED;
                     }
                 } else if ($cancelled) {
                     $job->status = export_job::STATUS_CANCELLED;
                     $job->timefinished = time();
                     if ($exporter->is_zip_open()) {
                         $exporter->close_zip_archive();
-                        temp_file_cleanup::delete_file_if_exists($result->zippath ?? '');
+                        temp_file_cleanup::delete_file_if_exists(export_job::job_zip_path((int) $job->id));
                     }
+                    $job->zippath = null;
                 } else {
-                    $job->status = export_job::STATUS_COMPLETED;
+                    $job->progressdone = (int) $job->progresstotal;
                     $job->timefinished = time();
                     if ($exporter->is_zip_open()) {
                         $exporter->close_zip_archive();
+                        temp_file_cleanup::delete_file_if_exists(export_job::job_zip_path((int) $job->id));
                     }
+                    $job->status = export_job::STATUS_FAILED;
+                    $job->errormessage = get_string('chainexportnoexported', 'block_configurable_reports');
+                    $job->zippath = null;
                 }
                 export_job::save($job);
             } else if (!empty($result->pendingfiles)) {

@@ -49,4 +49,12 @@ $functions = [
         'type' => 'write',
         'ajax' => true,
     ],
+
+    'block_configurable_reports_dismiss_chain_export' => [
+        'classname' => 'block_configurable_reports\external',
+        'methodname' => 'dismiss_chain_export',
+        'description' => 'Dismiss chain export job.',
+        'type' => 'write',
+        'ajax' => true,
+    ],
 ];

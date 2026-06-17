@@ -105,8 +105,16 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
                         ready.removeClass('d-none').text(msg);
                     });
             }
+            root.find('[data-nodownload]').addClass('d-none');
         } else {
             downloadLink.addClass('d-none');
+        }
+
+        var dismissBtn = root.find('[data-dismissbutton]');
+        if (status.dismissable) {
+            dismissBtn.removeClass('d-none');
+        } else {
+            dismissBtn.addClass('d-none');
         }
 
         if (terminal) {
@@ -138,6 +146,33 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             },
             fail: Notification.exception
         }]);
+    };
+
+    var bindDismiss = function(root) {
+        root.find('[data-dismissbutton]').on('click', function(e) {
+            e.preventDefault();
+            Str.get_strings([
+                {key: 'chainexportdismissconfirm', component: 'block_configurable_reports'},
+                {key: 'yes'},
+                {key: 'no'}
+            ]).then(function(strings) {
+                if (!window.confirm(strings[0])) {
+                    return;
+                }
+                Ajax.call([{
+                    methodname: 'block_configurable_reports_dismiss_chain_export',
+                    args: {jobid: root.data('jobid')},
+                    done: function(status) {
+                        if (status.dismissed && root.data('newexporturl')) {
+                            window.location.href = root.data('newexporturl');
+                            return;
+                        }
+                        applyStatus(root, status);
+                    },
+                    fail: Notification.exception
+                }]);
+            });
+        });
     };
 
     /**
@@ -181,6 +216,7 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             root.data('initialized', 1);
             root.data('polling', 1);
             bindCancel(root);
+            bindDismiss(root);
             poll(root);
         });
     };
