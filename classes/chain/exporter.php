@@ -51,16 +51,24 @@ class exporter {
     /**
      * Open a ZIP archive for incremental writes.
      *
-     * @param string $zipfilename
+     * @param string $zipfilename Download filename (not used in the on-disk path).
+     * @param int|null $jobid When set, use a short canonical path for background jobs.
      * @return string Path to the zip file.
      */
-    public function open_zip_archive(string $zipfilename): string {
+    public function open_zip_archive(string $zipfilename, ?int $jobid = null): string {
         if ($this->zip !== null) {
             throw new \coding_exception('ZIP archive already open');
         }
 
         $tempdir = temp_file_cleanup::get_temp_directory();
-        $this->zippath = $tempdir . '/' . uniqid('zip_', true) . '_' . clean_filename($zipfilename);
+        if ($jobid !== null) {
+            $this->zippath = export_job::job_zip_path($jobid);
+            if (is_file($this->zippath)) {
+                @unlink($this->zippath);
+            }
+        } else {
+            $this->zippath = $tempdir . '/' . uniqid('zip_', true) . '.zip';
+        }
         $this->usednames = [];
 
         $zip = new \ZipArchive();

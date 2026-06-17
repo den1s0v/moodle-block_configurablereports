@@ -222,5 +222,17 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2027061400, 'block', 'configurable_reports');
     }
 
+    if ($oldversion < 2027061401) {
+        $table = new xmldb_table('block_configurable_reports_cjob');
+        $field = new xmldb_field('zippath', XMLDB_TYPE_TEXT, null, null, null, null, null, 'skipped');
+        $dbman->change_field_type($table, $field);
+
+        upgrade_plugin_savepoint(true, 2027061401, 'block', 'configurable_reports');
+    }
+
+    if ($oldversion < 2027061402) {
+        upgrade_plugin_savepoint(true, 2027061402, 'block', 'configurable_reports');
+    }
+
     return true;
 }

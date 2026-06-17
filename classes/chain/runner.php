@@ -244,7 +244,7 @@ class runner {
             $job->exported = $job->exported ?? json_encode([]);
             $job->skipped = $job->skipped ?? json_encode([]);
             export_job::save($job);
-            $exporter->open_zip_archive($result->zipfilename);
+            $exporter->open_zip_archive($result->zipfilename, (int) $job->id);
         }
 
         try {
@@ -277,7 +277,7 @@ class runner {
                     $result->skipped[] = $skip;
                     if ($job) {
                         $this->append_job_skipped($job, $skip);
-                        $this->update_job_progress($job, $durationms, false);
+                        $this->update_job_progress($job, $durationms);
                     }
                     continue;
                 }
@@ -301,7 +301,7 @@ class runner {
                         $result->skipped[] = $skip;
                         if ($job) {
                             $this->append_job_skipped($job, $skip);
-                            $this->update_job_progress($job, $durationms, false);
+                            $this->update_job_progress($job, $durationms);
                         }
                         continue;
                     }
@@ -318,7 +318,7 @@ class runner {
                     $exporter->add_file_to_zip($filename, $temppath);
                     temp_file_cleanup::delete_file_if_exists($temppath);
                     $this->append_job_exported($job, $exported);
-                    $this->update_job_progress($job, $durationms, true);
+                    $this->update_job_progress($job, $durationms);
                     if ($groupindex < count($groups) - 1) {
                         export_job::apply_iteration_delay($durationms);
                     }
@@ -333,9 +333,10 @@ class runner {
 
             if ($incremental) {
                 $cancelled = $job && export_job::is_cancel_requested($job);
+                $job->progressdone = (int) $job->progresstotal;
                 if (!empty($result->exported)) {
                     $result->zippath = $exporter->close_zip_archive();
-                    $job->zippath = $result->zippath;
+                    $job->zippath = export_job::job_zip_path((int) $job->id);
                     $job->zipfilename = $result->zipfilename;
                     $job->timefinished = time();
                     $job->status = ($cancelled && (int) $job->progressdone < (int) $job->progresstotal)
@@ -408,10 +409,10 @@ class runner {
     /**
      * @param object $job
      * @param int $durationms
-     * @param bool $countasdone
+     * @param bool $countasdone Whether to advance the iteration counter (default true).
      * @return void
      */
-    private function update_job_progress(object $job, int $durationms, bool $countasdone): void {
+    private function update_job_progress(object $job, int $durationms, bool $countasdone = true): void {
         if ($countasdone) {
             $job->progressdone = (int) $job->progressdone + 1;
         }

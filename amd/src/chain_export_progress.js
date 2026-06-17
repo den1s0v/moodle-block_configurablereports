@@ -49,10 +49,20 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
      * @param {Object} status
      */
     var applyStatus = function(root, status) {
-        root.find('[data-progressbar]').attr('aria-valuenow', status.progresspercent)
-            .css('width', status.progresspercent + '%')
-            .text(status.progresspercent + '%');
-        root.find('[data-progresslabel]').text(status.progressdone + ' / ' + status.progresstotal);
+        var percent = status.progresspercent;
+        var done = status.progressdone;
+        var total = status.progresstotal;
+        var terminal = ['completed', 'partial', 'failed', 'cancelled'].indexOf(status.status) >= 0;
+        var finishedok = status.status === 'completed' || status.status === 'partial';
+        if (finishedok && total > 0) {
+            percent = 100;
+            done = total;
+        }
+
+        root.find('[data-progressbar]').attr('aria-valuenow', percent)
+            .css('width', percent + '%')
+            .text(percent + '%');
+        root.find('[data-progresslabel]').text(done + ' / ' + total);
 
         if (status.status === 'queued' && status.queueposition > 0) {
             Str.get_string('chainexportqueuewait', 'block_configurable_reports', {
@@ -61,26 +71,44 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             }).then(function(msg) {
                 root.find('[data-statustext]').text(msg);
             }).catch(Notification.exception);
+        } else if (terminal) {
+            Str.get_string('chainexportstatus_' + status.status, 'block_configurable_reports').then(function(msg) {
+                root.find('[data-statustext]').text(msg);
+            }).catch(function() {
+                root.find('[data-statustext]').text(status.status);
+            });
         } else {
-            var statusText = status.status;
-            if (status.etaseconds > 0) {
-                statusText += ' ~' + formatEta(status.etaseconds);
-            }
-            root.find('[data-statustext]').text(statusText);
+            Str.get_string('chainexportstatus_' + status.status, 'block_configurable_reports').then(function(msg) {
+                var statusText = msg;
+                if (status.etaseconds > 0) {
+                    statusText += ' ~' + formatEta(status.etaseconds);
+                }
+                root.find('[data-statustext]').text(statusText);
+            }).catch(function() {
+                root.find('[data-statustext]').text(status.status);
+            });
         }
 
         if (status.errormessage) {
             root.find('[data-error]').removeClass('d-none').text(status.errormessage);
+        } else {
+            root.find('[data-error]').addClass('d-none');
         }
 
         var downloadLink = root.find('[data-downloadlink]');
         if (status.downloadable) {
             downloadLink.removeClass('d-none');
+            var ready = root.find('[data-downloadready]');
+            if (ready.length && status.exportedcount > 0) {
+                Str.get_string('chainexportdownloadready', 'block_configurable_reports', status.exportedcount)
+                    .then(function(msg) {
+                        ready.removeClass('d-none').text(msg);
+                    });
+            }
         } else {
             downloadLink.addClass('d-none');
         }
 
-        var terminal = ['completed', 'partial', 'failed', 'cancelled'].indexOf(status.status) >= 0;
         if (terminal) {
             root.data('polling', 0);
             root.find('[data-cancelbutton]').addClass('d-none');

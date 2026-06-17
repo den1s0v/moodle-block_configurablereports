@@ -151,6 +151,10 @@ function block_configurable_reports_render_chainexport_progress(
         ]);
     }
 
+    $progresspercent = $status['progresspercent'];
+    $progressdone = $status['progressdone'];
+    $progresstotal = $status['progresstotal'];
+
     echo html_writer::start_div('chain-export-progress mb-3', [
         'data-region' => 'chain-export-progress',
         'data-jobid' => (int) $job->id,
@@ -159,13 +163,13 @@ function block_configurable_reports_render_chainexport_progress(
     echo html_writer::tag('p', $statustext, ['data-statustext' => 1, 'class' => 'chainexport-statustext']);
     echo html_writer::start_div('progress mb-2');
     echo html_writer::div(
-        $status['progresspercent'] . '%',
+        $progresspercent . '%',
         'progress-bar',
         [
             'role' => 'progressbar',
             'data-progressbar' => 1,
-            'style' => 'width: ' . $status['progresspercent'] . '%',
-            'aria-valuenow' => $status['progresspercent'],
+            'style' => 'width: ' . $progresspercent . '%',
+            'aria-valuenow' => $progresspercent,
             'aria-valuemin' => 0,
             'aria-valuemax' => 100,
         ]
@@ -174,8 +178,8 @@ function block_configurable_reports_render_chainexport_progress(
     echo html_writer::tag(
         'p',
         get_string('chainexportprogresslabel', 'block_configurable_reports', (object) [
-            'done' => $status['progressdone'],
-            'total' => $status['progresstotal'],
+            'done' => $progressdone,
+            'total' => $progresstotal,
         ]),
         ['data-progresslabel' => 1]
     );
@@ -185,6 +189,14 @@ function block_configurable_reports_render_chainexport_progress(
         echo html_writer::tag('p', '', ['data-error' => 1, 'class' => 'd-none alert alert-danger']);
     }
     $downloadclass = $status['downloadable'] ? 'btn btn-primary mb-2' : 'btn btn-primary mb-2 d-none';
+    if ($status['downloadable'] && $status['exportedcount'] > 0) {
+        echo html_writer::tag('p', get_string('chainexportdownloadready', 'block_configurable_reports', $status['exportedcount']), [
+            'class' => 'chainexport-downloadready mb-2',
+            'data-downloadready' => 1,
+        ]);
+    } else {
+        echo html_writer::tag('p', '', ['class' => 'd-none chainexport-downloadready mb-2', 'data-downloadready' => 1]);
+    }
     echo html_writer::link(
         $downloadurl,
         get_string('chainexportdownloadzip', 'block_configurable_reports'),
@@ -269,12 +281,16 @@ if ($downloadzip && $jobid) {
     if (!in_array($job->status, [export_job::STATUS_COMPLETED, export_job::STATUS_PARTIAL], true)) {
         throw new moodle_exception('chainerror_jobnotready', 'block_configurable_reports');
     }
-    if ((int) $job->timeexpires < time() || empty($job->zippath) || !is_file($job->zippath)) {
+    if ((int) $job->timeexpires < time()) {
         throw new moodle_exception('chainerror_nozip', 'block_configurable_reports');
     }
-    $zipfilename = $job->zipfilename ?: basename($job->zippath);
+    $zippath = export_job::resolve_zip_path($job);
+    if ($zippath === null) {
+        throw new moodle_exception('chainerror_nozip', 'block_configurable_reports');
+    }
+    $zipfilename = $job->zipfilename ?: basename($zippath);
     export_job::mark_downloaded($jobid, (int) $USER->id);
-    send_temp_file($job->zippath, $zipfilename);
+    send_temp_file($zippath, $zipfilename);
 }
 
 if ($downloadzip) {

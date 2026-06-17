@@ -320,8 +320,7 @@ if ($elements) {
                 $downloadable = in_array($job->status, [export_job::STATUS_COMPLETED, export_job::STATUS_PARTIAL], true)
                     && empty($job->zipdownloaded)
                     && (int) $job->timeexpires > time()
-                    && !empty($job->zippath)
-                    && is_file($job->zippath);
+                    && export_job::resolve_zip_path($job) !== null;
                 if ($downloadable) {
                     $downloadurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
                         'id' => $id,

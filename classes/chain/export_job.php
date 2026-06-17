@@ -389,6 +389,50 @@ class export_job {
     }
 
     /**
+     * Canonical on-disk path for a job ZIP (short path, fits DB column).
+     *
+     * @param int $jobid
+     * @return string
+     */
+    public static function job_zip_path(int $jobid): string {
+        return temp_file_cleanup::get_temp_directory() . '/cjob_' . $jobid . '.zip';
+    }
+
+    /**
+     * Resolve the ZIP file path for a job (handles legacy truncated DB values).
+     *
+     * @param object $job
+     * @return string|null
+     */
+    public static function resolve_zip_path(object $job): ?string {
+        if (!empty($job->zippath) && is_file($job->zippath)) {
+            return $job->zippath;
+        }
+        $canonical = self::job_zip_path((int) $job->id);
+        if (is_file($canonical)) {
+            return $canonical;
+        }
+        // Legacy jobs may have a truncated path in the DB while the file still exists on disk.
+        if (!empty($job->zippath)) {
+            $dir = temp_file_cleanup::get_temp_directory();
+            $prefix = $job->zippath;
+            if (is_dir($dir) && strncmp($prefix, $dir, strlen($dir)) === 0) {
+                $iterator = new \DirectoryIterator($dir);
+                foreach ($iterator as $item) {
+                    if ($item->isDot() || !$item->isFile()) {
+                        continue;
+                    }
+                    $path = $item->getPathname();
+                    if (strncmp($path, $prefix, strlen($prefix)) === 0) {
+                        return $path;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Build status payload for AJAX.
      *
      * @param object $job
@@ -418,19 +462,28 @@ class export_job {
             }
         }
 
+        $zippath = self::resolve_zip_path($job);
         $downloadable = in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true)
-            && !empty($job->zippath)
-            && is_file($job->zippath)
+            && $zippath !== null
+            && count($exported) > 0
             && (int) $job->timeexpires > time();
+
+        $progressdone = (int) $job->progressdone;
+        $progresstotal = (int) $job->progresstotal;
+        $finished = in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true);
+        if ($finished && $progresstotal > 0) {
+            $progressdone = $progresstotal;
+        }
+        $progresspercent = $progresstotal > 0
+            ? (int) round(($progressdone / $progresstotal) * 100)
+            : ($finished ? 100 : 0);
 
         return [
             'jobid' => (int) $job->id,
             'status' => $job->status,
-            'progresstotal' => (int) $job->progresstotal,
-            'progressdone' => (int) $job->progressdone,
-            'progresspercent' => (int) $job->progresstotal > 0
-                ? (int) round(((int) $job->progressdone / (int) $job->progresstotal) * 100)
-                : 0,
+            'progresstotal' => $progresstotal,
+            'progressdone' => $progressdone,
+            'progresspercent' => $progresspercent,
             'etaseconds' => (int) round(($etams + $waitetams) / 1000),
             'queueposition' => $queueposition,
             'exportedcount' => count($exported),
