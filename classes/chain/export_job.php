@@ -584,17 +584,39 @@ class export_job {
     }
 
     /**
+     * Whether a path points to a non-empty readable ZIP archive.
+     *
+     * @param string|null $path
+     * @return bool
+     */
+    public static function is_valid_zip_file(?string $path): bool {
+        if (empty($path) || !is_file($path)) {
+            return false;
+        }
+        if (@filesize($path) <= 22) {
+            return false;
+        }
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) {
+            return false;
+        }
+        $valid = $zip->numFiles > 0;
+        $zip->close();
+        return $valid;
+    }
+
+    /**
      * Resolve the ZIP file path for a job (handles legacy truncated DB values).
      *
      * @param object $job
      * @return string|null
      */
     public static function resolve_zip_path(object $job): ?string {
-        if (!empty($job->zippath) && is_file($job->zippath)) {
+        if (!empty($job->zippath) && self::is_valid_zip_file($job->zippath)) {
             return $job->zippath;
         }
         $canonical = self::job_zip_path((int) $job->id);
-        if (is_file($canonical)) {
+        if (self::is_valid_zip_file($canonical)) {
             return $canonical;
         }
         // Legacy jobs may have a truncated path in the DB while the file still exists on disk.
@@ -608,7 +630,7 @@ class export_job {
                         continue;
                     }
                     $path = $item->getPathname();
-                    if (strncmp($path, $prefix, strlen($prefix)) === 0) {
+                    if (strncmp($path, $prefix, strlen($prefix)) === 0 && self::is_valid_zip_file($path)) {
                         return $path;
                     }
                 }

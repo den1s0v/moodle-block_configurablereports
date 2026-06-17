@@ -108,6 +108,12 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             root.find('[data-nodownload]').addClass('d-none');
         } else {
             downloadLink.addClass('d-none');
+            root.find('[data-downloadready]').addClass('d-none');
+            if (finishedok && status.dismissable) {
+                root.find('[data-nodownload]').removeClass('d-none');
+            } else {
+                root.find('[data-nodownload]').addClass('d-none');
+            }
         }
 
         var dismissBtn = root.find('[data-dismissbutton]');

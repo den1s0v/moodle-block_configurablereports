@@ -335,10 +335,15 @@ class runner {
                 $cancelled = $job && export_job::is_cancel_requested($job);
                 if (!empty($result->exported)) {
                     $result->zippath = $exporter->close_zip_archive();
-                    $job->zippath = export_job::job_zip_path((int) $job->id);
+                    $job->zippath = $result->zippath;
                     $job->zipfilename = $result->zipfilename;
                     $job->timefinished = time();
-                    if ($cancelled) {
+                    if (!export_job::is_valid_zip_file($result->zippath)) {
+                        $job->status = export_job::STATUS_FAILED;
+                        $job->errormessage = get_string('chainerror_nozip', 'block_configurable_reports');
+                        $job->zippath = null;
+                        temp_file_cleanup::delete_file_if_exists($result->zippath);
+                    } else if ($cancelled) {
                         $job->status = export_job::STATUS_PARTIAL;
                     } else {
                         $job->progressdone = (int) $job->progresstotal;

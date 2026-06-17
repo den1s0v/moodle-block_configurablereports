@@ -19,6 +19,8 @@ namespace block_configurable_reports;
 defined('MOODLE_INTERNAL') || die();
 
 use block_configurable_reports\chain\exporter;
+use block_configurable_reports\chain\export_job;
+use block_configurable_reports\chain\temp_file_cleanup;
 
 /**
  * Tests for chain ZIP exporter.
@@ -41,8 +43,30 @@ class chain_exporter_test extends \advanced_testcase {
      * Text exports should use deflate compression.
      */
     public function test_compression_method_for_text_exports(): void {
-        $this->assertSame(\ZipArchive::CM_DEFLATE, exporter::compression_method_for_entry('grades.csv'));
-        $this->assertSame(\ZipArchive::CM_DEFLATE, exporter::compression_method_for_entry('report.json'));
-        $this->assertSame(\ZipArchive::CM_DEFLATE, exporter::compression_method_for_entry('legacy.slk'));
+        $this->assertSame(\ZipArchive::CM_DEFLATE, exporter::compression_method_for_entry('report.csv'));
+        $this->assertSame(\ZipArchive::CM_DEFLATE, exporter::compression_method_for_entry('data.json'));
+        $this->assertSame(\ZipArchive::CM_DEFLATE, exporter::compression_method_for_entry('export.txt'));
+    }
+
+    /**
+     * addFromString should embed file bytes immediately.
+     */
+    public function test_add_file_to_zip_survives_source_deletion(): void {
+        $exporter = new exporter();
+        $tempdir = temp_file_cleanup::get_temp_directory();
+        $source = $tempdir . '/chainexport_test_source.txt';
+        file_put_contents($source, 'chain export zip payload');
+
+        $exporter->open_zip_archive('test.zip');
+        $exporter->add_file_to_zip('payload.txt', $source);
+        @unlink($source);
+        $zippath = $exporter->close_zip_archive();
+
+        $this->assertTrue(export_job::is_valid_zip_file($zippath));
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($zippath) === true);
+        $this->assertSame('chain export zip payload', $zip->getFromName('payload.txt'));
+        $zip->close();
+        temp_file_cleanup::delete_file_if_exists($zippath);
     }
 }

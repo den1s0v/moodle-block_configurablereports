@@ -92,7 +92,14 @@ class exporter {
         }
 
         $entryname = $this->unique_entry_name($entryname);
-        if (!$this->zip->addFile($filepath, $entryname)) {
+        if (!is_file($filepath) || !is_readable($filepath)) {
+            throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
+        }
+        $contents = file_get_contents($filepath);
+        if ($contents === false) {
+            throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
+        }
+        if (!$this->zip->addFromString($entryname, $contents)) {
             throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
         }
 
