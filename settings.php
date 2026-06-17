@@ -141,6 +141,29 @@ if ($ADMIN->fulltree) {
         )
     );
 
+    $settings->add(new admin_setting_configtext('block_configurable_reports/allowedsqlusers', get_string('allowedsqlusers', 'block_configurable_reports'),
+        get_string('allowedsqlusersinfo', 'block_configurable_reports'), '', PARAM_TEXT));
+    // csv delimiters used in get_delimiter() of moodle lib/csvlib.class.php
+    $csvdelimiteroptions= array('cfg'=>'cfg','colon'=>'colon','comma'=>'comma','semicolon'=>'semicolon','tab'=>'tab');
+    $settings->add(new admin_setting_configselect('block_configurable_reports/csvdelimiter', get_string('csvdelimiter', 'block_configurable_reports'), 
+        get_string('csvdelimiterinfo', 'block_configurable_reports'), 'cfg', $csvdelimiteroptions));
+
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_configurable_reports/jsonunicode',
+            get_string('jsonunicode', 'block_configurable_reports'),
+            get_string('jsonunicodeinfo', 'block_configurable_reports'),
+            1
+        )
+    );
+    
+
+    $settings->add(new admin_setting_heading(
+        'block_configurable_reports/chainsettings',
+        get_string('chainsettingsheading', 'block_configurable_reports'),
+        get_string('chainsettingsheading_desc', 'block_configurable_reports')
+    ));
+
     $settings->add(
         new admin_setting_configtext(
             'block_configurable_reports/chainmaxrows',
@@ -200,19 +223,4 @@ if ($ADMIN->fulltree) {
     );
 
 
-    $settings->add(new admin_setting_configtext('block_configurable_reports/allowedsqlusers', get_string('allowedsqlusers', 'block_configurable_reports'),
-        get_string('allowedsqlusersinfo', 'block_configurable_reports'), '', PARAM_TEXT));
-    // csv delimiters used in get_delimiter() of moodle lib/csvlib.class.php
-    $csvdelimiteroptions= array('cfg'=>'cfg','colon'=>'colon','comma'=>'comma','semicolon'=>'semicolon','tab'=>'tab');
-    $settings->add(new admin_setting_configselect('block_configurable_reports/csvdelimiter', get_string('csvdelimiter', 'block_configurable_reports'), 
-        get_string('csvdelimiterinfo', 'block_configurable_reports'), 'cfg', $csvdelimiteroptions));
-
-    $settings->add(
-        new admin_setting_configcheckbox(
-            'block_configurable_reports/jsonunicode',
-            get_string('jsonunicode', 'block_configurable_reports'),
-            get_string('jsonunicodeinfo', 'block_configurable_reports'),
-            1
-        )
-    );
 }
