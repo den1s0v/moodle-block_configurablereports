@@ -203,6 +203,11 @@ function block_configurable_reports_render_chainexport_progress(
         get_string('chainexportdownloadzip', 'block_configurable_reports'),
         ['class' => $downloadclass, 'data-downloadlink' => 1]
     );
+    echo html_writer::div(
+        get_string('chainexportzipalreadydownloaded', 'block_configurable_reports'),
+        'alert alert-info chainexport-alreadydownloaded mb-2' . (empty($status['zipdownloaded']) ? ' d-none' : ''),
+        ['data-alreadydownloaded' => 1]
+    );
     if (in_array($status['status'], [export_job::STATUS_QUEUED, export_job::STATUS_RUNNING], true)) {
         echo ' ' . html_writer::tag(
             'button',
@@ -309,15 +314,27 @@ if ($downloadzip && $jobid) {
     if (!$job || (int) $job->userid !== (int) $USER->id || (int) $job->parentreportid !== (int) $id) {
         throw new moodle_exception('badpermissions', 'block_configurable_reports');
     }
+    $redirecturl = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+        'id' => $id,
+        'chainid' => $job->chainid,
+        'courseid' => $courseid,
+        'jobid' => (int) $job->id,
+    ], $filterparams));
     if (!in_array($job->status, [export_job::STATUS_COMPLETED, export_job::STATUS_PARTIAL], true)) {
         throw new moodle_exception('chainerror_jobnotready', 'block_configurable_reports');
     }
+    if (!empty($job->zipdownloaded)) {
+        redirect($redirecturl, get_string('chainexportzipalreadydownloaded', 'block_configurable_reports'),
+            null, \core\output\notification::NOTIFY_INFO);
+    }
     if ((int) $job->timeexpires < time()) {
-        throw new moodle_exception('chainerror_nozip', 'block_configurable_reports');
+        redirect($redirecturl, get_string('chainerror_nozip', 'block_configurable_reports'),
+            null, \core\output\notification::NOTIFY_WARNING);
     }
     $zippath = export_job::resolve_zip_path($job);
     if ($zippath === null) {
-        throw new moodle_exception('chainerror_nozip', 'block_configurable_reports');
+        redirect($redirecturl, get_string('chainerror_nozip', 'block_configurable_reports'),
+            null, \core\output\notification::NOTIFY_WARNING);
     }
     $zipfilename = $job->zipfilename ?: basename($zippath);
     export_job::mark_downloaded($jobid, (int) $USER->id);

@@ -377,6 +377,9 @@ class export_job {
         if (!in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true)) {
             return false;
         }
+        if (!empty($job->zipdownloaded)) {
+            return false;
+        }
         if ((int) $job->timeexpires < time()) {
             return false;
         }
