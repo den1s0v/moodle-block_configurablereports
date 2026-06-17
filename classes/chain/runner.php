@@ -43,6 +43,9 @@ class runner {
     /** @var int */
     private int $userid;
 
+    /** @var array<string, mixed> */
+    private array $parentfilterparams;
+
     /** @var \report_base|null */
     private ?\report_base $parentreportclass = null;
 
@@ -53,13 +56,21 @@ class runner {
      * @param array<string, mixed> $chainelement
      * @param \context $context
      * @param int $userid
+     * @param array<string, mixed> $parentfilterparams
      */
-    public function __construct(object $parentreport, array $chainelement, \context $context, int $userid) {
+    public function __construct(
+        object $parentreport,
+        array $chainelement,
+        \context $context,
+        int $userid,
+        array $parentfilterparams = []
+    ) {
         $this->parentreport = $parentreport;
         $this->chainelement = $chainelement;
         $this->formdata = definition::normalise_formdata((object) ($chainelement['formdata'] ?? new \stdClass()));
         $this->context = $context;
         $this->userid = $userid;
+        $this->parentfilterparams = $parentfilterparams;
     }
 
     /**
@@ -130,7 +141,7 @@ class runner {
     }
 
     /**
-     * Export selected parent rows to a ZIP archive of child reports.
+     * Export selected parent rows to a ZIP archive of child reports (sync).
      *
      * @param array<int, string> $selectedrowkeys
      * @param string $format
@@ -139,15 +150,15 @@ class runner {
     public function export_selected_rows(array $selectedrowkeys, string $format): export_result {
         global $DB;
 
+        $childreport = $DB->get_record('block_configurable_reports', ['id' => (int) $this->formdata->childreportid], '*', MUST_EXIST);
         $result = new export_result();
-        $result->zipfilename = clean_filename(format_string($this->parentreport->name) . '_chainexport.zip');
+        $result->zipfilename = definition::build_zip_filename($this->parentreport, $childreport, $this->formdata);
 
         $validation = definition::validate_element($this->parentreport, $this->chainelement);
         if (!$validation->valid) {
             throw new \moodle_exception('chainerror_invalid', 'block_configurable_reports', '', $validation->error);
         }
 
-        $childreport = $DB->get_record('block_configurable_reports', ['id' => (int) $this->formdata->childreportid], '*', MUST_EXIST);
         $allowedformats = definition::get_allowed_export_formats($childreport);
         if (!isset($allowedformats[$format])) {
             throw new \moodle_exception('chainerror_exportformat', 'block_configurable_reports');
@@ -157,22 +168,91 @@ class runner {
             throw new \moodle_exception('badpermissions', 'block_configurable_reports');
         }
 
-        $parentclass = $this->load_parent_report();
-        $table = $parentclass->finalreport->table;
+        temp_file_cleanup::cleanup_stale_files();
+        return $this->run_export_loop($selectedrowkeys, $format, $childreport, null, $result);
+    }
 
-        $rowindexes = $this->resolve_selected_row_indexes($selectedrowkeys);
-        if (empty($rowindexes)) {
-            throw new \moodle_exception('chainerror_norows', 'block_configurable_reports');
+    /**
+     * Export for a background job (incremental ZIP + progress).
+     *
+     * @param object $job
+     * @return void
+     */
+    public function export_for_job(object $job): void {
+        global $DB;
+
+        $selectedrowkeys = json_decode($job->selectedrowkeys ?? '[]', true) ?: [];
+        $format = $job->exportformat;
+        $childreport = $DB->get_record('block_configurable_reports', ['id' => (int) $this->formdata->childreportid], '*', MUST_EXIST);
+
+        $validation = definition::validate_element($this->parentreport, $this->chainelement);
+        if (!$validation->valid) {
+            export_job::mark_failed($job, $validation->error);
+            return;
+        }
+
+        if (!cr_check_report_permissions($childreport, $this->userid, $this->context)) {
+            export_job::mark_failed($job, get_string('badpermissions', 'block_configurable_reports'));
+            return;
         }
 
         temp_file_cleanup::cleanup_stale_files();
+        $result = new export_result();
+        $result->zipfilename = $job->zipfilename ?: definition::build_zip_filename($this->parentreport, $childreport, $this->formdata);
+        $this->run_export_loop($selectedrowkeys, $format, $childreport, $job, $result);
+    }
 
-        $exporter = new exporter();
-        $files = [];
-        $rownum = 0;
+    /**
+     * Core export loop (sync or job-backed).
+     *
+     * @param array<int, string> $selectedrowkeys
+     * @param string $format
+     * @param object $childreport
+     * @param object|null $job
+     * @param export_result $result
+     * @return export_result
+     */
+    private function run_export_loop(
+        array $selectedrowkeys,
+        string $format,
+        object $childreport,
+        ?object $job,
+        export_result $result
+    ): export_result {
+        global $DB;
+
+        $parentclass = $this->load_parent_report();
+        $table = $parentclass->finalreport->table;
+        $rowindexes = $this->resolve_selected_row_indexes($selectedrowkeys);
+        if (empty($rowindexes)) {
+            if ($job) {
+                export_job::mark_failed($job, get_string('chainerror_norows', 'block_configurable_reports'));
+            } else {
+                throw new \moodle_exception('chainerror_norows', 'block_configurable_reports');
+            }
+            return $result;
+        }
+
         $groups = definition::group_row_indexes_by_column_mapping($table, $rowindexes, $this->formdata);
+        $exporter = new exporter();
+        $rownum = 0;
+        $incremental = ($job !== null);
+        $temppaths = [];
+
+        if ($incremental) {
+            $job->progresstotal = count($groups);
+            $job->exported = $job->exported ?? json_encode([]);
+            $job->skipped = $job->skipped ?? json_encode([]);
+            export_job::save($job);
+            $exporter->open_zip_archive($result->zipfilename);
+        }
+
         try {
-            foreach ($groups as $group) {
+            foreach ($groups as $groupindex => $group) {
+                if ($job && export_job::is_cancel_requested($job)) {
+                    break;
+                }
+
                 $rownum++;
                 $rowindex = $group->rowindex;
                 $keyvalues = definition::extract_row_key_values($table, $rowindex, $this->formdata->rowkeycolumns);
@@ -184,14 +264,21 @@ class runner {
                     $rowlabel .= ' ' . get_string('chainexportmergedrows', 'block_configurable_reports', $group->count);
                 }
 
+                $start = microtime(true);
                 $filterparams = definition::build_child_filter_params_for_row($table, $rowindex, $this->formdata);
                 $childfinal = $this->execute_child_report($childreport, $filterparams);
+                $durationms = (int) round((microtime(true) - $start) * 1000);
 
                 if (!definition::finalreport_has_data($childfinal)) {
-                    $result->skipped[] = (object) [
+                    $skip = (object) [
                         'label' => $rowlabel,
                         'reason' => get_string('chainexportskippednodata', 'block_configurable_reports'),
                     ];
+                    $result->skipped[] = $skip;
+                    if ($job) {
+                        $this->append_job_skipped($job, $skip);
+                        $this->update_job_progress($job, $durationms, false);
+                    }
                     continue;
                 }
 
@@ -207,34 +294,137 @@ class runner {
                     $temppath = $exporter->export_child_report_to_tempfile($childfinal, $format, $filename);
                 } catch (\moodle_exception $e) {
                     if ($e->errorcode === 'chainerror_exportempty') {
-                        $result->skipped[] = (object) [
+                        $skip = (object) [
                             'label' => $rowlabel,
                             'reason' => get_string('chainexportskippednodata', 'block_configurable_reports'),
                         ];
+                        $result->skipped[] = $skip;
+                        if ($job) {
+                            $this->append_job_skipped($job, $skip);
+                            $this->update_job_progress($job, $durationms, false);
+                        }
                         continue;
                     }
                     throw $e;
                 }
 
-                $files[] = [
-                    'name' => $filename,
-                    'path' => $temppath,
-                ];
-                $result->exported[] = (object) [
+                $exported = (object) [
                     'label' => $rowlabel,
                     'filename' => $filename,
                 ];
+                $result->exported[] = $exported;
+
+                if ($incremental) {
+                    $exporter->add_file_to_zip($filename, $temppath);
+                    temp_file_cleanup::delete_file_if_exists($temppath);
+                    $this->append_job_exported($job, $exported);
+                    $this->update_job_progress($job, $durationms, true);
+                    if ($groupindex < count($groups) - 1) {
+                        export_job::apply_iteration_delay($durationms);
+                    }
+                } else {
+                    $temppaths[] = $temppath;
+                    $result->pendingfiles[] = [
+                        'name' => $filename,
+                        'path' => $temppath,
+                    ];
+                }
             }
 
-            if (!empty($files)) {
-                $result->zippath = $exporter->create_zip_archive($files, $result->zipfilename);
+            if ($incremental) {
+                $cancelled = $job && export_job::is_cancel_requested($job);
+                if (!empty($result->exported)) {
+                    $result->zippath = $exporter->close_zip_archive();
+                    $job->zippath = $result->zippath;
+                    $job->zipfilename = $result->zipfilename;
+                    $job->timefinished = time();
+                    $job->status = ($cancelled && (int) $job->progressdone < (int) $job->progresstotal)
+                        ? export_job::STATUS_PARTIAL
+                        : export_job::STATUS_COMPLETED;
+                    if ($cancelled && (int) $job->progressdone === 0) {
+                        $job->status = export_job::STATUS_CANCELLED;
+                        temp_file_cleanup::delete_file_if_exists($result->zippath);
+                        $job->zippath = null;
+                    }
+                } else if ($cancelled) {
+                    $job->status = export_job::STATUS_CANCELLED;
+                    $job->timefinished = time();
+                    if ($exporter->is_zip_open()) {
+                        $exporter->close_zip_archive();
+                        temp_file_cleanup::delete_file_if_exists($result->zippath ?? '');
+                    }
+                } else {
+                    $job->status = export_job::STATUS_COMPLETED;
+                    $job->timefinished = time();
+                    if ($exporter->is_zip_open()) {
+                        $exporter->close_zip_archive();
+                    }
+                }
+                export_job::save($job);
+            } else if (!empty($result->pendingfiles)) {
+                $result->zippath = $exporter->create_zip_archive($result->pendingfiles, $result->zipfilename);
             }
         } catch (\Throwable $e) {
-            temp_file_cleanup::cleanup_temp_files(array_column($files, 'path'));
-            throw $e;
+            if ($incremental && $exporter->is_zip_open()) {
+                $exporter->close_zip_archive();
+            }
+            temp_file_cleanup::cleanup_temp_files($temppaths);
+            if ($job) {
+                export_job::mark_failed($job, $e->getMessage());
+            } else {
+                throw $e;
+            }
+        } finally {
+            if (!empty($this->parentfilterparams)) {
+                filter_injection::clear((int) $this->parentreport->id);
+            }
         }
 
         return $result;
+    }
+
+    /**
+     * @param object $job
+     * @param object $item
+     * @return void
+     */
+    private function append_job_exported(object $job, object $item): void {
+        $exported = json_decode($job->exported ?? '[]', true) ?: [];
+        $exported[] = ['label' => $item->label, 'filename' => $item->filename];
+        $job->exported = json_encode($exported);
+    }
+
+    /**
+     * @param object $job
+     * @param object $item
+     * @return void
+     */
+    private function append_job_skipped(object $job, object $item): void {
+        $skipped = json_decode($job->skipped ?? '[]', true) ?: [];
+        $skipped[] = ['label' => $item->label, 'reason' => $item->reason];
+        $job->skipped = json_encode($skipped);
+    }
+
+    /**
+     * @param object $job
+     * @param int $durationms
+     * @param bool $countasdone
+     * @return void
+     */
+    private function update_job_progress(object $job, int $durationms, bool $countasdone): void {
+        if ($countasdone) {
+            $job->progressdone = (int) $job->progressdone + 1;
+        }
+        $job->lastdurationms = $durationms;
+        if ((int) $job->progressdone > 0) {
+            $prevavg = (int) $job->avgdurationms;
+            $job->avgdurationms = (int) round(
+                ($prevavg * ((int) $job->progressdone - 1) + $durationms) / (int) $job->progressdone
+            );
+        } else {
+            $job->avgdurationms = $durationms;
+        }
+        export_job::save($job);
     }
 
     /**
@@ -288,6 +478,9 @@ class runner {
      * @return \report_base
      */
     private function create_parent_report_instance(): \report_base {
+        if (!empty($this->parentfilterparams)) {
+            filter_injection::set((int) $this->parentreport->id, $this->parentfilterparams);
+        }
         require_once($GLOBALS['CFG']->dirroot . '/blocks/configurable_reports/reports/' . $this->parentreport->type . '/report.class.php');
         $classname = 'report_' . $this->parentreport->type;
         return new $classname($this->parentreport);

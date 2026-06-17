@@ -30,6 +30,9 @@ require_once($CFG->dirroot . '/blocks/configurable_reports/report.class.php');
 require_once($CFG->dirroot . '/blocks/configurable_reports/component.class.php');
 require_once($CFG->dirroot . '/blocks/configurable_reports/plugin.class.php');
 
+use block_configurable_reports\chain\definition;
+use block_configurable_reports\chain\export_job;
+
 $id = required_param('id', PARAM_INT);
 $comp = required_param('comp', PARAM_ALPHA);
 $courseid = optional_param('courseid', null, PARAM_INT);
@@ -154,9 +157,14 @@ if ($comp === 'chains') {
         'id' => $id,
         'courseid' => $courseid,
     ]);
+    $helpurl = new moodle_url('/blocks/configurable_reports/chainhelp.php', [
+        'id' => $id,
+        'courseid' => $courseid,
+    ]);
     $chainshelp = get_string('chains_usage_help', 'block_configurable_reports', (object) [
         'viewreportlink' => html_writer::link($viewreporturl, get_string('viewreport', 'block_configurable_reports')),
         'exportlink' => get_string('chainexportlink', 'block_configurable_reports'),
+        'helplink' => html_writer::link($helpurl, get_string('chainhelp_link', 'block_configurable_reports')),
     ]);
     echo $OUTPUT->box($chainshelp, 'generalbox boxwidthnormal boxaligncenter chains-usage-help mb-3');
 }
@@ -275,6 +283,68 @@ if ($elements) {
         $i++;
     }
     cr_print_table($table);
+
+    if ($comp === 'chains') {
+        $userjobs = export_job::get_user_jobs_for_report((int) $USER->id, (int) $id);
+        if ($userjobs) {
+            echo $OUTPUT->heading(get_string('chainexportjobsheading', 'block_configurable_reports'), 4);
+            $jobtable = new html_table();
+            $jobtable->attributes['class'] = 'generaltable chainexport-jobs';
+            $jobtable->head = [
+                get_string('chainexportjobchain', 'block_configurable_reports'),
+                get_string('chainexportjobstatus', 'block_configurable_reports'),
+                get_string('chainexportjobprogress', 'block_configurable_reports'),
+                get_string('chainexportjobcreated', 'block_configurable_reports'),
+                get_string('chainexportjobfinished', 'block_configurable_reports'),
+                get_string('edit'),
+            ];
+            foreach ($userjobs as $job) {
+                $chainelement = definition::get_chain_element_by_id($report, $job->chainid);
+                $chainlabel = $job->chainid;
+                if ($chainelement) {
+                    $chainform = definition::normalise_formdata((object) ($chainelement['formdata'] ?? new stdClass()));
+                    $chainchild = null;
+                    if (!empty($chainform->childreportid)) {
+                        $chainchild = $DB->get_record('block_configurable_reports', ['id' => (int) $chainform->childreportid],
+                            'id,name', IGNORE_MISSING);
+                    }
+                    $chainlabel = definition::get_chain_display_name($chainelement, $chainchild ?: null);
+                }
+                $monitorurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
+                    'id' => $id,
+                    'chainid' => $job->chainid,
+                    'courseid' => $courseid,
+                    'jobid' => (int) $job->id,
+                ]);
+                $actions = html_writer::link($monitorurl, get_string('chainexportjobmonitor', 'block_configurable_reports'));
+                $downloadable = in_array($job->status, [export_job::STATUS_COMPLETED, export_job::STATUS_PARTIAL], true)
+                    && empty($job->zipdownloaded)
+                    && (int) $job->timeexpires > time()
+                    && !empty($job->zippath)
+                    && is_file($job->zippath);
+                if ($downloadable) {
+                    $downloadurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
+                        'id' => $id,
+                        'chainid' => $job->chainid,
+                        'courseid' => $courseid,
+                        'jobid' => (int) $job->id,
+                        'downloadzip' => 1,
+                        'sesskey' => sesskey(),
+                    ]);
+                    $actions .= ' ' . html_writer::link($downloadurl, get_string('chainexportdownloadzip', 'block_configurable_reports'));
+                }
+                $jobtable->data[] = [
+                    s($chainlabel),
+                    get_string('chainexportstatus_' . $job->status, 'block_configurable_reports'),
+                    (int) $job->progressdone . ' / ' . (int) $job->progresstotal,
+                    userdate((int) $job->timecreated),
+                    !empty($job->timefinished) ? userdate((int) $job->timefinished) : '-',
+                    $actions,
+                ];
+            }
+            echo html_writer::table($jobtable);
+        }
+    }
 } else if ($compclass->plugins) {
     echo $OUTPUT->heading(get_string('no' . $comp . 'yet', 'block_configurable_reports'));
 }

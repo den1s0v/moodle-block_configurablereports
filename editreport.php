@@ -227,6 +227,10 @@ if ($editform->is_cancelled()) {
         $data->requirefiltersubmit = BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT;
     }
 
+    if (!isset($data->chainexportmode)) {
+        $data->chainexportmode = BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_INHERIT;
+    }
+
     if (empty($report)) {
         $data->ownerid = $USER->id;
         $data->courseid = $courseid;

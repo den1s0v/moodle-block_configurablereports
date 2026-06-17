@@ -14,23 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Version details
- *
- * Configurable Reports - A Moodle block for creating customizable reports
- *
- * @package       block_configurable_reports
- * @author        Juan leyva <http://www.twitter.com/jleyvadelgado>
- * @copyright     Juan leyva <http://www.twitter.com/jleyvadelgado>
- * @license       http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2027061400;
-$plugin->requires = 2022041900; // Requires this Moodle version, 4.0.
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = '5.2.0';
-$plugin->supported = [400, 500];
-$plugin->component = 'block_configurable_reports';
-$plugin->cron = 86400;
+$tasks = [];

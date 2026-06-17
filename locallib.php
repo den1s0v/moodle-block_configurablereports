@@ -33,6 +33,12 @@ defined('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_RESTRICTIVE') || define('BLOCK_C
 defined('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_SKIP') || define('BLOCK_CONFIGURABLE_REPORTS_FILTER_EXEC_SKIP', 2);
 /** Inherit site default for requirefiltersubmit. */
 defined('BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT') || define('BLOCK_CONFIGURABLE_REPORTS_REQUIREFILTER_INHERIT', -1);
+/** Inherit site default for chain export mode. */
+defined('BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_INHERIT') || define('BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_INHERIT', -1);
+/** Run chain export synchronously in the HTTP request. */
+defined('BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_SYNC') || define('BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_SYNC', 0);
+/** Run chain export in a background adhoc task. */
+defined('BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_ASYNC') || define('BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_ASYNC', 1);
 
 /**
  * Resolve a report filter request parameter, honouring programmatic injection.
@@ -56,6 +62,36 @@ function cr_get_filter_param(int $reportid, string $paramname, $default, $paramt
         }
     }
     return optional_param($paramname, $default, $paramtype);
+}
+
+/**
+ * Effective chain export mode for a report record.
+ *
+ * @param object $report
+ * @return int BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_SYNC or _ASYNC
+ */
+function cr_effective_chainexport_mode(object $report): int {
+    $setting = (int) ($report->chainexportmode ?? BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_INHERIT);
+    if ($setting === BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_INHERIT) {
+        return (int) get_config('block_configurable_reports', 'chainexportmode_default');
+    }
+    return $setting;
+}
+
+/**
+ * Capture parent report filter parameters from the current request.
+ *
+ * @return array<string, mixed>
+ */
+function cr_capture_parent_filter_params(): array {
+    $params = [];
+    $request = array_merge($_POST, $_GET);
+    foreach ($request as $key => $val) {
+        if (strpos((string) $key, 'filter_') === 0) {
+            $params[$key] = $val;
+        }
+    }
+    return $params;
 }
 
 /**

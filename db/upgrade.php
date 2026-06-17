@@ -173,5 +173,54 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2027050500, 'block', 'configurable_reports');
     }
 
+    if ($oldversion < 2027061400) {
+        $table = new xmldb_table('block_configurable_reports');
+        $field = new xmldb_field('chainexportmode', XMLDB_TYPE_INTEGER, '2', XMLDB_UNSIGNED, XMLDB_NOTNULL, null, '-1', 'requirefiltersubmit');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $table = new xmldb_table('block_configurable_reports_cjob');
+        if (!$dbman->table_exists($table)) {
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('parentreportid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('chainid', XMLDB_TYPE_CHAR, '32', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('courseid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'queued');
+            $table->add_field('exportformat', XMLDB_TYPE_CHAR, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('parentfilters', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $table->add_field('selectedrowkeys', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $table->add_field('progresstotal', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('progressdone', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('lastdurationms', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('avgdurationms', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('zipdownloaded', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('cancelrequested', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('exported', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $table->add_field('skipped', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $table->add_field('zippath', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+            $table->add_field('zipfilename', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+            $table->add_field('errormessage', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timestarted', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timefinished', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timeexpires', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+            $table->add_key('parentreportid', XMLDB_KEY_FOREIGN, ['parentreportid'], 'block_configurable_reports', ['id']);
+            $table->add_index('parentstatus', XMLDB_INDEX_NOTUNIQUE, ['parentreportid', 'status']);
+            $table->add_index('userparentchain', XMLDB_INDEX_NOTUNIQUE, ['userid', 'parentreportid', 'chainid', 'status']);
+            $dbman->create_table($table);
+        }
+
+        set_config('chainexportmode_default', 1, 'block_configurable_reports');
+        set_config('chainexportdelaythresholdms', 5000, 'block_configurable_reports');
+        set_config('chainexportdelaypercent', 15, 'block_configurable_reports');
+        set_config('chainexportjobttl', 48, 'block_configurable_reports');
+
+        upgrade_plugin_savepoint(true, 2027061400, 'block', 'configurable_reports');
+    }
+
     return true;
 }

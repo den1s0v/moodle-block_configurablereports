@@ -110,6 +110,8 @@ class definition {
             $normalised->filenamepattern = '##reportname##_##row##';
         }
 
+        $normalised->zipfilenamepattern = trim((string) ($normalised->zipfilenamepattern ?? ''));
+
         if (!isset($normalised->enabled)) {
             $normalised->enabled = 1;
         }
@@ -671,6 +673,41 @@ class definition {
             $filename .= '.' . $ext;
         }
 
+        return $filename;
+    }
+
+    /**
+     * Build ZIP archive filename from chain configuration.
+     *
+     * @param object $parentreport
+     * @param object $childreport
+     * @param object $formdata Normalised chain form data.
+     * @return string
+     */
+    public static function build_zip_filename(object $parentreport, object $childreport, object $formdata): string {
+        $pattern = trim((string) ($formdata->zipfilenamepattern ?? ''));
+        if ($pattern === '') {
+            $pattern = '##sourcereport##-##targetreport##';
+        }
+
+        $replacements = [
+            'sourcereport' => format_string($parentreport->name),
+            'targetreport' => format_string($childreport->name),
+            'chainname' => $formdata->chainname !== '' ? $formdata->chainname : format_string($childreport->name),
+        ];
+
+        $filename = $pattern;
+        foreach ($replacements as $key => $value) {
+            $filename = str_replace('##' . $key . '##', $value, $filename);
+        }
+        $filename = preg_replace('/##[^#]+##/', '', $filename);
+        $filename = clean_filename($filename);
+        if ($filename === '') {
+            $filename = clean_filename(format_string($parentreport->name) . '-' . format_string($childreport->name));
+        }
+        if (!preg_match('/\.zip$/i', $filename)) {
+            $filename .= '.zip';
+        }
         return $filename;
     }
 

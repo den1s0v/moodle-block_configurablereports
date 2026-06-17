@@ -20,7 +20,6 @@ defined('MOODLE_INTERNAL') || die();
 
 use block_configurable_reports\chain\definition;
 use block_configurable_reports\chain\filter_params;
-use block_configurable_reports\chain\filter_params;
 
 /**
  * Tests for chain definition helpers.
@@ -178,6 +177,21 @@ class chain_definition_test extends \advanced_testcase {
         }, $groups);
         sort($counts);
         $this->assertSame([1, 2], $counts);
+    }
+
+    /**
+     * ZIP filename builder should use pattern placeholders.
+     */
+    public function test_build_zip_filename_uses_pattern(): void {
+        $parent = (object) ['name' => 'Source Report'];
+        $child = (object) ['name' => 'Target Report'];
+        $formdata = (object) [
+            'chainname' => 'My chain',
+            'zipfilenamepattern' => '##sourcereport##-##targetreport##-##chainname##',
+        ];
+        $filename = definition::build_zip_filename($parent, $child, $formdata);
+        $this->assertStringEndsWith('.zip', $filename);
+        $this->assertStringNotContainsString('/', $filename);
     }
 
     /**

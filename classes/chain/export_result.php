@@ -37,6 +37,9 @@ class export_result {
     /** @var array<int, object> Skipped items with label and reason. */
     public array $skipped = [];
 
+    /** @var array<int, array{name: string, path: string}> Files pending ZIP (sync path). */
+    public array $pendingfiles = [];
+
     /**
      * Whether any file was exported.
      *

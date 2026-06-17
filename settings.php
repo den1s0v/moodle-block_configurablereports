@@ -25,6 +25,8 @@
 
 defined('MOODLE_INTERNAL') || die;
 
+require_once($CFG->dirroot . '/blocks/configurable_reports/locallib.php');
+
 if ($ADMIN->fulltree) {
     $settings->add(
         new admin_setting_configtext(
@@ -147,6 +149,53 @@ if ($ADMIN->fulltree) {
             '100',
             PARAM_INT,
             6
+        )
+    );
+
+    $chainexportmodeoptions = [
+        (string) BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_SYNC => get_string('chainexportmode_sync', 'block_configurable_reports'),
+        (string) BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_ASYNC => get_string('chainexportmode_async', 'block_configurable_reports'),
+    ];
+    $settings->add(
+        new admin_setting_configselect(
+            'block_configurable_reports/chainexportmode_default',
+            get_string('chainexportmode_default', 'block_configurable_reports'),
+            get_string('chainexportmode_default_help', 'block_configurable_reports'),
+            (string) BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_ASYNC,
+            $chainexportmodeoptions
+        )
+    );
+
+    $settings->add(
+        new admin_setting_configtext(
+            'block_configurable_reports/chainexportdelaythresholdms',
+            get_string('chainexportdelaythresholdms', 'block_configurable_reports'),
+            get_string('chainexportdelaythresholdms_help', 'block_configurable_reports'),
+            '5000',
+            PARAM_INT,
+            8
+        )
+    );
+
+    $settings->add(
+        new admin_setting_configtext(
+            'block_configurable_reports/chainexportdelaypercent',
+            get_string('chainexportdelaypercent', 'block_configurable_reports'),
+            get_string('chainexportdelaypercent_help', 'block_configurable_reports'),
+            '15',
+            PARAM_INT,
+            4
+        )
+    );
+
+    $settings->add(
+        new admin_setting_configtext(
+            'block_configurable_reports/chainexportjobttl',
+            get_string('chainexportjobttl', 'block_configurable_reports'),
+            get_string('chainexportjobttl_help', 'block_configurable_reports'),
+            '48',
+            PARAM_INT,
+            4
         )
     );
 

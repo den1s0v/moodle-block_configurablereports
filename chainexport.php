@@ -25,6 +25,7 @@ require_once($CFG->dirroot . '/blocks/configurable_reports/locallib.php');
 require_once($CFG->dirroot . '/blocks/configurable_reports/report.class.php');
 
 use block_configurable_reports\chain\definition;
+use block_configurable_reports\chain\export_job;
 use block_configurable_reports\chain\export_result;
 use block_configurable_reports\chain\runner;
 use block_configurable_reports\chain\temp_file_cleanup;
@@ -105,6 +106,102 @@ function block_configurable_reports_chainexport_render_back_link($output, moodle
  * @param context $context
  * @return void
  */
+/**
+ * Render async chain export progress UI.
+ *
+ * @param renderer_base $output
+ * @param object $job
+ * @param int $courseid
+ * @param array<string, mixed> $filterparams
+ * @return void
+ */
+function block_configurable_reports_render_chainexport_progress(
+    $output,
+    object $job,
+    int $courseid,
+    array $filterparams
+): void {
+    global $PAGE;
+
+    $status = export_job::build_status_payload($job, (int) $GLOBALS['USER']->id);
+    $PAGE->requires->js_call_amd('block_configurable_reports/chain_export_progress', 'init');
+
+    $downloadurl = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+        'id' => (int) $job->parentreportid,
+        'chainid' => $job->chainid,
+        'courseid' => $courseid,
+        'jobid' => (int) $job->id,
+        'downloadzip' => 1,
+        'sesskey' => sesskey(),
+    ], $filterparams));
+
+    $newexporturl = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+        'id' => (int) $job->parentreportid,
+        'chainid' => $job->chainid,
+        'courseid' => $courseid,
+        'newexport' => 1,
+    ], $filterparams));
+
+    $statustext = get_string('chainexportstatus_' . $job->status, 'block_configurable_reports');
+    if ($status['status'] === export_job::STATUS_QUEUED && $status['queueposition'] > 0) {
+        $eta = $status['etaseconds'] > 0 ? format_time($status['etaseconds']) : get_string('unknown', 'moodle');
+        $statustext = get_string('chainexportqueuewait', 'block_configurable_reports', (object) [
+            'position' => $status['queueposition'],
+            'eta' => $eta,
+        ]);
+    }
+
+    echo html_writer::start_div('chain-export-progress mb-3', [
+        'data-region' => 'chain-export-progress',
+        'data-jobid' => (int) $job->id,
+    ]);
+    echo html_writer::tag('p', get_string('chainexportprogressheading', 'block_configurable_reports'), ['class' => 'h4']);
+    echo html_writer::tag('p', $statustext, ['data-statustext' => 1, 'class' => 'chainexport-statustext']);
+    echo html_writer::start_div('progress mb-2');
+    echo html_writer::div(
+        $status['progresspercent'] . '%',
+        'progress-bar',
+        [
+            'role' => 'progressbar',
+            'data-progressbar' => 1,
+            'style' => 'width: ' . $status['progresspercent'] . '%',
+            'aria-valuenow' => $status['progresspercent'],
+            'aria-valuemin' => 0,
+            'aria-valuemax' => 100,
+        ]
+    );
+    echo html_writer::end_div();
+    echo html_writer::tag(
+        'p',
+        get_string('chainexportprogresslabel', 'block_configurable_reports', (object) [
+            'done' => $status['progressdone'],
+            'total' => $status['progresstotal'],
+        ]),
+        ['data-progresslabel' => 1]
+    );
+    if (!empty($status['errormessage'])) {
+        echo html_writer::tag('p', s($status['errormessage']), ['data-error' => 1, 'class' => 'alert alert-danger']);
+    } else {
+        echo html_writer::tag('p', '', ['data-error' => 1, 'class' => 'd-none alert alert-danger']);
+    }
+    $downloadclass = $status['downloadable'] ? 'btn btn-primary mb-2' : 'btn btn-primary mb-2 d-none';
+    echo html_writer::link(
+        $downloadurl,
+        get_string('chainexportdownloadzip', 'block_configurable_reports'),
+        ['class' => $downloadclass, 'data-downloadlink' => 1]
+    );
+    if (in_array($status['status'], [export_job::STATUS_QUEUED, export_job::STATUS_RUNNING], true)) {
+        echo ' ' . html_writer::tag(
+            'button',
+            get_string('chainexportcancelrequest', 'block_configurable_reports'),
+            ['type' => 'button', 'class' => 'btn btn-secondary mb-2', 'data-cancelbutton' => 1]
+        );
+    }
+    echo html_writer::empty_tag('hr');
+    echo $output->single_button($newexporturl, get_string('chainexportnewexport', 'block_configurable_reports'), 'get');
+    echo html_writer::end_div();
+}
+
 function block_configurable_reports_chainexport_print_tabs(object $report, report_base $reportclass, context $context): void {
     global $USER;
 
@@ -119,6 +216,8 @@ function block_configurable_reports_chainexport_print_tabs(object $report, repor
 $id = required_param('id', PARAM_INT);
 $chainid = optional_param('chainid', '', PARAM_ALPHANUMEXT);
 $courseid = optional_param('courseid', null, PARAM_INT);
+$jobid = optional_param('jobid', 0, PARAM_INT);
+$newexport = optional_param('newexport', 0, PARAM_BOOL);
 $downloadzip = optional_param('downloadzip', 0, PARAM_BOOL);
 $exportdone = optional_param('exportdone', 0, PARAM_BOOL);
 $exportformat = optional_param('exportformat', '', PARAM_ALPHA);
@@ -159,6 +258,23 @@ $reportclass = new $reportclassname($report);
 
 if (!$reportclass->check_permissions($USER->id, $context)) {
     throw new moodle_exception('badpermissions', 'block_configurable_reports');
+}
+
+if ($downloadzip && $jobid) {
+    require_sesskey();
+    $job = export_job::get($jobid);
+    if (!$job || (int) $job->userid !== (int) $USER->id || (int) $job->parentreportid !== (int) $id) {
+        throw new moodle_exception('badpermissions', 'block_configurable_reports');
+    }
+    if (!in_array($job->status, [export_job::STATUS_COMPLETED, export_job::STATUS_PARTIAL], true)) {
+        throw new moodle_exception('chainerror_jobnotready', 'block_configurable_reports');
+    }
+    if ((int) $job->timeexpires < time() || empty($job->zippath) || !is_file($job->zippath)) {
+        throw new moodle_exception('chainerror_nozip', 'block_configurable_reports');
+    }
+    $zipfilename = $job->zipfilename ?: basename($job->zippath);
+    export_job::mark_downloaded($jobid, (int) $USER->id);
+    send_temp_file($job->zippath, $zipfilename);
 }
 
 if ($downloadzip) {
@@ -249,6 +365,47 @@ if ($chainid) {
         throw new moodle_exception('chainerror_invalid', 'block_configurable_reports', '', $validation->error);
     }
 
+    if (!$jobid && !$newexport && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+        $resumable = export_job::get_resumable_for_user((int) $USER->id, (int) $id, $chainid);
+        if ($resumable) {
+            redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+                'id' => $id,
+                'chainid' => $chainid,
+                'courseid' => $courseid,
+                'jobid' => (int) $resumable->id,
+            ], $filterparams)));
+        }
+    }
+
+    if ($jobid) {
+        $job = export_job::get($jobid);
+        if (!$job || (int) $job->userid !== (int) $USER->id || $job->chainid !== $chainid
+            || (int) $job->parentreportid !== (int) $id) {
+            throw new moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+        }
+
+        global $DB;
+        $childreport = $DB->get_record('block_configurable_reports', [
+            'id' => (int) definition::normalise_formdata((object) $chainelement['formdata'])->childreportid,
+        ], '*', MUST_EXIST);
+        $chaincontextlabel = definition::get_chain_list_label($chainelement, $childreport);
+        $pageheading = get_string('chainexportheadingcontext', 'block_configurable_reports', (object) [
+            'source' => $reportname,
+            'chain' => $chaincontextlabel,
+        ]);
+
+        echo $OUTPUT->header();
+        block_configurable_reports_chainexport_print_tabs($report, $reportclass, $context);
+        block_configurable_reports_chainexport_render_back_link($OUTPUT, $chainexportbackurl);
+        echo $OUTPUT->heading($pageheading);
+        $helpurl = new moodle_url('/blocks/configurable_reports/chainhelp.php', ['id' => $id, 'courseid' => $courseid]);
+        echo html_writer::div(html_writer::link($helpurl, get_string('chainhelp_link', 'block_configurable_reports')), 'mb-2');
+        block_configurable_reports_render_chainexport_progress($OUTPUT, $job, (int) $courseid, $filterparams);
+        echo $OUTPUT->single_button($chainexportbackurl, get_string('back'), 'get');
+        echo $OUTPUT->footer();
+        exit;
+    }
+
     global $DB;
     $childreport = $DB->get_record('block_configurable_reports', [
         'id' => (int) definition::normalise_formdata((object) $chainelement['formdata'])->childreportid,
@@ -260,7 +417,7 @@ if ($chainid) {
         'chain' => $chaincontextlabel,
     ]);
 
-    $runnerinstance = new runner($report, $chainelement, $context, (int) $USER->id);
+    $runnerinstance = new runner($report, $chainelement, $context, (int) $USER->id, $filterparams);
     $rows = $runnerinstance->get_parent_row_descriptors();
     $head = $runnerinstance->get_parent_table_head();
 
@@ -301,6 +458,26 @@ if ($chainid) {
         block_configurable_reports_chainexport_discard_session_zip();
 
         $selectedrowkeys = chain_export_form::extract_selected_rowkeys_from_submission();
+        $parentfilters = cr_capture_parent_filter_params();
+
+        if (cr_effective_chainexport_mode($report) === BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_ASYNC) {
+            $newjobid = export_job::create_and_queue(
+                $report,
+                $chainelement,
+                $context,
+                (int) $USER->id,
+                $data->exportformat,
+                $selectedrowkeys,
+                $parentfilters
+            );
+            redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+                'id' => $id,
+                'chainid' => $chainid,
+                'courseid' => $courseid,
+                'jobid' => $newjobid,
+            ], $filterparams)));
+        }
+
         $exportresult = $runnerinstance->export_selected_rows($selectedrowkeys, $data->exportformat);
 
         if ($exportresult->has_exports()) {
@@ -434,6 +611,8 @@ EOT
         echo html_writer::empty_tag('hr');
     }
 
+    $helpurl = new moodle_url('/blocks/configurable_reports/chainhelp.php', ['id' => $id, 'courseid' => $courseid]);
+    echo html_writer::div(html_writer::link($helpurl, get_string('chainhelp_link', 'block_configurable_reports')), 'mb-2');
     echo html_writer::tag('p', get_string('chainexportintro', 'block_configurable_reports'));
     if ($form->is_submitted() && !$form->is_validated()) {
         echo $OUTPUT->notification(get_string('chainexportvalidationfailed', 'block_configurable_reports'), 'notifyerror');

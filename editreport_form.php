@@ -25,6 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die;
 require_once($CFG->libdir . '/formslib.php');
+require_once($CFG->dirroot . '/blocks/configurable_reports/locallib.php');
 
 /**
  * Class report_edit_form
@@ -157,6 +158,26 @@ class report_edit_form extends moodleform {
         foreach ($options as $key => $val) {
             $mform->addElement('checkbox', 'export_' . $key, null, $val);
         }
+
+        $defaultmode = (int) get_config('block_configurable_reports', 'chainexportmode_default');
+        $defaultmodelabel = $defaultmode === BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_ASYNC
+            ? get_string('chainexportmode_async', 'block_configurable_reports')
+            : get_string('chainexportmode_sync', 'block_configurable_reports');
+        $chainexportoptions = [
+            (string) BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_INHERIT => get_string('chainexportmode_inherit', 'block_configurable_reports', (object) [
+                'current' => $defaultmodelabel,
+            ]),
+            (string) BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_SYNC => get_string('chainexportmode_sync', 'block_configurable_reports'),
+            (string) BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_ASYNC => get_string('chainexportmode_async', 'block_configurable_reports'),
+        ];
+        $mform->addElement(
+            'select',
+            'chainexportmode',
+            get_string('chainexportmode', 'block_configurable_reports'),
+            $chainexportoptions
+        );
+        $mform->addHelpButton('chainexportmode', 'chainexportmode', 'block_configurable_reports');
+        $mform->setDefault('chainexportmode', BLOCK_CONFIGURABLE_REPORTS_CHAINEXPORT_INHERIT);
 
         if (isset($this->_customdata['report']->id) && $this->_customdata['report']->id) {
             $mform->addElement('hidden', 'id', $this->_customdata['report']->id);

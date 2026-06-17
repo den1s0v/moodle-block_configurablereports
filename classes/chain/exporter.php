@@ -27,6 +27,15 @@ use block_configurable_reports\export\report_exporter;
  */
 class exporter {
 
+    /** @var \ZipArchive|null */
+    private ?\ZipArchive $zip = null;
+
+    /** @var string */
+    private string $zippath = '';
+
+    /** @var array<string, int> */
+    private array $usednames = [];
+
     /**
      * Export a child final report to a temp file.
      *
@@ -40,50 +49,132 @@ class exporter {
     }
 
     /**
-     * Create a ZIP archive from export files.
+     * Open a ZIP archive for incremental writes.
+     *
+     * @param string $zipfilename
+     * @return string Path to the zip file.
+     */
+    public function open_zip_archive(string $zipfilename): string {
+        if ($this->zip !== null) {
+            throw new \coding_exception('ZIP archive already open');
+        }
+
+        $tempdir = temp_file_cleanup::get_temp_directory();
+        $this->zippath = $tempdir . '/' . uniqid('zip_', true) . '_' . clean_filename($zipfilename);
+        $this->usednames = [];
+
+        $zip = new \ZipArchive();
+        if ($zip->open($this->zippath, \ZipArchive::CREATE) !== true) {
+            throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
+        }
+        $this->zip = $zip;
+        return $this->zippath;
+    }
+
+    /**
+     * Add a file to the open ZIP archive.
+     *
+     * @param string $entryname
+     * @param string $filepath
+     * @return void
+     */
+    public function add_file_to_zip(string $entryname, string $filepath): void {
+        if ($this->zip === null) {
+            throw new \coding_exception('ZIP archive is not open');
+        }
+
+        $entryname = $this->unique_entry_name($entryname);
+        if (!$this->zip->addFile($filepath, $entryname)) {
+            throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
+        }
+
+        $index = $this->zip->numFiles - 1;
+        $method = self::compression_method_for_entry($entryname);
+        if (method_exists($this->zip, 'setCompressionIndex')) {
+            $this->zip->setCompressionIndex($index, $method);
+        } else if ($method === \ZipArchive::CM_STORE && method_exists($this->zip, 'setCompressionName')) {
+            $this->zip->setCompressionName($entryname, \ZipArchive::CM_STORE);
+        }
+    }
+
+    /**
+     * Close the open ZIP archive.
+     *
+     * @return string Path to the zip file.
+     */
+    public function close_zip_archive(): string {
+        if ($this->zip === null) {
+            throw new \coding_exception('ZIP archive is not open');
+        }
+        $this->zip->close();
+        $this->zip = null;
+        return $this->zippath;
+    }
+
+    /**
+     * Whether a ZIP archive is currently open.
+     *
+     * @return bool
+     */
+    public function is_zip_open(): bool {
+        return $this->zip !== null;
+    }
+
+    /**
+     * Create a ZIP archive from export files (one-shot).
      *
      * @param array<int, array{name: string, path: string}> $files
      * @param string $zipfilename
      * @return string Path to zip file.
      */
     public function create_zip_archive(array $files, string $zipfilename): string {
-        $tempdir = temp_file_cleanup::get_temp_directory();
-        $zippath = $tempdir . '/' . uniqid('zip_', true) . '_' . clean_filename($zipfilename);
-
-        $zip = new \zip_archive();
-        if ($zip->open($zippath, \file_archive::CREATE) !== true) {
-            throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
-        }
-
+        $this->open_zip_archive($zipfilename);
         try {
-            $usednames = [];
             foreach ($files as $file) {
-                $entryname = $file['name'];
-                if (isset($usednames[$entryname])) {
-                    $usednames[$entryname]++;
-                    $dot = strrpos($entryname, '.');
-                    if ($dot !== false) {
-                        $entryname = substr($entryname, 0, $dot) . '_' . $usednames[$entryname] . substr($entryname, $dot);
-                    } else {
-                        $entryname .= '_' . $usednames[$entryname];
-                    }
-                } else {
-                    $usednames[$entryname] = 1;
-                }
-
-                if (!$zip->add_file_from_pathname($entryname, $file['path'])) {
-                    throw new \moodle_exception('chainerror_zip', 'block_configurable_reports');
-                }
+                $this->add_file_to_zip($file['name'], $file['path']);
             }
-            $zip->close();
+            return $this->close_zip_archive();
         } catch (\Throwable $e) {
-            $zip->close();
-            temp_file_cleanup::delete_file_if_exists($zippath);
+            if ($this->zip !== null) {
+                $this->zip->close();
+                $this->zip = null;
+            }
+            temp_file_cleanup::delete_file_if_exists($this->zippath);
             throw $e;
         } finally {
             temp_file_cleanup::cleanup_temp_files(array_column($files, 'path'));
         }
+    }
 
-        return $zippath;
+    /**
+     * Compression method for a zip entry based on file extension.
+     *
+     * @param string $entryname
+     * @return int ZipArchive::CM_* constant.
+     */
+    public static function compression_method_for_entry(string $entryname): int {
+        if (preg_match('/\.(xlsx?|ods)$/i', $entryname)) {
+            return \ZipArchive::CM_STORE;
+        }
+        return \ZipArchive::CM_DEFLATE;
+    }
+
+    /**
+     * Ensure unique entry names inside the archive.
+     *
+     * @param string $entryname
+     * @return string
+     */
+    private function unique_entry_name(string $entryname): string {
+        if (!isset($this->usednames[$entryname])) {
+            $this->usednames[$entryname] = 1;
+            return $entryname;
+        }
+        $this->usednames[$entryname]++;
+        $dot = strrpos($entryname, '.');
+        if ($dot !== false) {
+            return substr($entryname, 0, $dot) . '_' . $this->usednames[$entryname] . substr($entryname, $dot);
+        }
+        return $entryname . '_' . $this->usednames[$entryname];
     }
 }

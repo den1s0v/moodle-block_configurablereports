@@ -33,4 +33,20 @@ $functions = [
         'type' => 'read',
         'ajax' => true,
     ],
+
+    'block_configurable_reports_get_chain_export_status' => [
+        'classname' => 'block_configurable_reports\external',
+        'methodname' => 'get_chain_export_status',
+        'description' => 'Poll chain export job status.',
+        'type' => 'read',
+        'ajax' => true,
+    ],
+
+    'block_configurable_reports_cancel_chain_export' => [
+        'classname' => 'block_configurable_reports\external',
+        'methodname' => 'cancel_chain_export',
+        'description' => 'Cancel chain export job.',
+        'type' => 'write',
+        'ajax' => true,
+    ],
 ];

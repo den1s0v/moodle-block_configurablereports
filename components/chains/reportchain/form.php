@@ -104,6 +104,11 @@ class reportchain_form extends moodleform {
         $mform->setDefault('filenamepattern', '##reportname##_##row##');
         $mform->addHelpButton('filenamepattern', 'chainfilenamepattern', 'block_configurable_reports');
 
+        $mform->addElement('text', 'zipfilenamepattern', get_string('chainzipfilenamepattern', 'block_configurable_reports'),
+            ['size' => 60]);
+        $mform->setType('zipfilenamepattern', PARAM_RAW);
+        $mform->addHelpButton('zipfilenamepattern', 'chainzipfilenamepattern', 'block_configurable_reports');
+
         if ($hascolumnmetadata) {
             $rowkeysize = min(10, max(3, count($sourcecolumnoptions)));
             $mform->addElement('select', 'rowkeycolumns', get_string('chainrowkeycolumns', 'block_configurable_reports'),

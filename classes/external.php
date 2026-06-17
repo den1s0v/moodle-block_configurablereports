@@ -28,6 +28,7 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once("$CFG->libdir/externallib.php");
 
+use block_configurable_reports\chain\export_job;
 use context_course;
 use context_system;
 use external_api;
@@ -126,6 +127,133 @@ class external extends external_api {
                 'warnings' => new external_value(PARAM_TEXT, 'Warning message'),
             ]
         );
+    }
+
+    /**
+     * get_chain_export_status parameters.
+     *
+     * @return external_function_parameters
+     */
+    public static function get_chain_export_status_parameters(): external_function_parameters {
+        return new external_function_parameters([
+            'jobid' => new external_value(PARAM_INT, 'Export job id', VALUE_REQUIRED),
+        ]);
+    }
+
+    /**
+     * Return chain export job status for polling.
+     *
+     * @param int $jobid
+     * @return array
+     */
+    public static function get_chain_export_status(int $jobid): array {
+        global $USER;
+
+        self::validate_parameters(self::get_chain_export_status_parameters(), ['jobid' => $jobid]);
+
+        $job = export_job::get($jobid);
+        if (!$job) {
+            throw new \moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+        }
+
+        $report = $GLOBALS['DB']->get_record('block_configurable_reports', ['id' => (int) $job->parentreportid], '*', MUST_EXIST);
+        if ((int) $report->courseid === SITEID) {
+            $context = context_system::instance();
+        } else {
+            $context = context_course::instance((int) $job->courseid ?: (int) $report->courseid);
+        }
+        self::validate_context($context);
+        require_capability('block/configurable_reports:viewreports', $context);
+
+        return export_job::build_status_payload($job, (int) $USER->id);
+    }
+
+    /**
+     * get_chain_export_status return structure.
+     *
+     * @return external_single_structure
+     */
+    public static function get_chain_export_status_returns(): external_single_structure {
+        return new external_single_structure([
+            'jobid' => new external_value(PARAM_INT, 'Job id'),
+            'status' => new external_value(PARAM_ALPHA, 'Job status'),
+            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
+            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
+            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
+            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
+            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
+            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
+            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
+            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
+            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
+            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
+            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
+        ]);
+    }
+
+    /**
+     * cancel_chain_export parameters.
+     *
+     * @return external_function_parameters
+     */
+    public static function cancel_chain_export_parameters(): external_function_parameters {
+        return new external_function_parameters([
+            'jobid' => new external_value(PARAM_INT, 'Export job id', VALUE_REQUIRED),
+        ]);
+    }
+
+    /**
+     * Cancel the current user's chain export job.
+     *
+     * @param int $jobid
+     * @return array
+     */
+    public static function cancel_chain_export(int $jobid): array {
+        global $USER;
+
+        self::validate_parameters(self::cancel_chain_export_parameters(), ['jobid' => $jobid]);
+
+        $job = export_job::get($jobid);
+        if (!$job) {
+            throw new \moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+        }
+
+        $report = $GLOBALS['DB']->get_record('block_configurable_reports', ['id' => (int) $job->parentreportid], '*', MUST_EXIST);
+        if ((int) $report->courseid === SITEID) {
+            $context = context_system::instance();
+        } else {
+            $context = context_course::instance((int) $job->courseid ?: (int) $report->courseid);
+        }
+        self::validate_context($context);
+        require_capability('block/configurable_reports:viewreports', $context);
+
+        $cancelled = export_job::cancel($jobid, (int) $USER->id);
+        $job = export_job::get($jobid);
+        return export_job::build_status_payload($job, (int) $USER->id) + ['cancelled' => $cancelled];
+    }
+
+    /**
+     * cancel_chain_export return structure.
+     *
+     * @return external_single_structure
+     */
+    public static function cancel_chain_export_returns(): external_single_structure {
+        return new external_single_structure([
+            'jobid' => new external_value(PARAM_INT, 'Job id'),
+            'status' => new external_value(PARAM_ALPHA, 'Job status'),
+            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
+            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
+            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
+            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
+            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
+            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
+            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
+            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
+            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
+            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
+            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
+            'cancelled' => new external_value(PARAM_BOOL, 'Whether cancel was accepted'),
+        ]);
     }
 
 }
