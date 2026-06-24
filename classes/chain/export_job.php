@@ -249,6 +249,9 @@ class export_job {
      */
     public static function get_running_for_parent(int $parentreportid, int $excludejobid = 0): ?object {
         global $DB;
+
+        self::detect_interrupted_jobs($parentreportid);
+
         $sql = "SELECT *
                   FROM {" . self::TABLE . "}
                  WHERE parentreportid = :parentreportid
@@ -579,6 +582,25 @@ class export_job {
     }
 
     /**
+     * Whether a running job has no active worker (lock not held).
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function is_orphaned_running_job(object $job): bool {
+        if ($job->status !== self::STATUS_RUNNING) {
+            return false;
+        }
+        $lockfactory = \core\lock\lock_config::get_lock_factory('block_configurable_reports');
+        $lock = $lockfactory->get_lock('chainjob_' . (int) $job->id, 0);
+        if ($lock) {
+            $lock->release();
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Detect and finalize running jobs that stopped making progress.
      *
      * @param int $parentreportid
@@ -593,7 +615,8 @@ class export_job {
             ['parentreportid' => $parentreportid, 'running' => self::STATUS_RUNNING]
         );
         foreach ($running as $job) {
-            if (!self::is_running_without_progress($job)) {
+            $shouldinterrupt = self::is_orphaned_running_job($job) || self::is_running_without_progress($job);
+            if (!$shouldinterrupt) {
                 continue;
             }
             $lockfactory = \core\lock\lock_config::get_lock_factory('block_configurable_reports');
@@ -603,7 +626,10 @@ class export_job {
             }
             try {
                 $fresh = self::get((int) $job->id);
-                if ($fresh && $fresh->status === self::STATUS_RUNNING && self::is_running_without_progress($fresh)) {
+                if (!$fresh || $fresh->status !== self::STATUS_RUNNING) {
+                    continue;
+                }
+                if (self::is_orphaned_running_job($fresh) || self::is_running_without_progress($fresh)) {
                     self::finalize_as_interrupted($fresh);
                 }
             } finally {
@@ -867,11 +893,13 @@ class export_job {
         $etams = $remaining * (int) $job->avgdurationms;
 
         $queueposition = 0;
+        $queueblocked = false;
         $waitetams = 0;
         if ($job->status === self::STATUS_QUEUED) {
             $queueposition = self::get_queue_position($job);
-            $running = self::get_running_for_parent((int) $job->parentreportid);
+            $running = self::get_running_for_parent((int) $job->parentreportid, (int) $job->id);
             if ($running) {
+                $queueblocked = true;
                 $runningremaining = max(0, (int) $running->progresstotal - (int) $running->progressdone);
                 $waitetams = $runningremaining * (int) $running->avgdurationms;
             }
@@ -913,6 +941,7 @@ class export_job {
             'progresspercent' => $progresspercent,
             'etaseconds' => (int) round(($etams + $waitetams) / 1000),
             'queueposition' => $queueposition,
+            'queueblocked' => $queueblocked,
             'exportedcount' => count($exported),
             'skippedcount' => count($skipped),
             'exportedpreview' => $exportedpreview,
@@ -1191,9 +1220,7 @@ class export_job {
             }
         }
 
-        if ($deleted > 0) {
-            self::dispatch_next_queued($parentreportid);
-        }
+        self::dispatch_next_queued($parentreportid);
 
         return [
             'deleted' => $deleted,

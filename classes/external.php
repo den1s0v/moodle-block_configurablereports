@@ -89,6 +89,7 @@ class external extends external_api {
             'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
             'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
             'queueposition' => new external_value(PARAM_INT, 'Queue position'),
+            'queueblocked' => new external_value(PARAM_BOOL, 'Whether queue is blocked by another running export'),
             'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
             'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
             'exportedpreview' => self::exported_preview_returns(),

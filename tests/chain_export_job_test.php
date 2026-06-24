@@ -246,22 +246,93 @@ class chain_export_job_test extends \advanced_testcase {
     }
 
     /**
-     * delete_all should remove non-running jobs and report running count.
+     * delete_all should remove non-running jobs, reclaim orphaned running jobs, and report active running count.
      */
     public function test_delete_all_jobs_for_user_report(): void {
         $this->resetAfterTest();
 
         $context = $this->create_job_context();
-        $running = $this->insert_job(['status' => export_job::STATUS_RUNNING], $context);
+        $running = $this->insert_job([
+            'status' => export_job::STATUS_RUNNING,
+            'timestarted' => time(),
+            'timelastprogress' => time(),
+        ], $context);
         $failed = $this->insert_job(['status' => export_job::STATUS_FAILED, 'chainid' => 'chain2'], $context);
         $cancelled = $this->insert_job(['status' => export_job::STATUS_CANCELLED, 'chainid' => 'chain3'], $context);
 
         $result = export_job::delete_all_jobs_for_user_report((int) $context->userid, (int) $context->parentreportid);
-        $this->assertSame(2, $result['deleted']);
-        $this->assertSame(1, $result['skippedrunning']);
+        $this->assertSame(3, $result['deleted']);
+        $this->assertSame(0, $result['skippedrunning']);
         $this->assertNull(export_job::get((int) $failed->id));
         $this->assertNull(export_job::get((int) $cancelled->id));
-        $this->assertNotNull(export_job::get((int) $running->id));
+        $this->assertNull(export_job::get((int) $running->id));
+    }
+
+    /**
+     * Orphaned running jobs without a worker lock should be interrupted.
+     */
+    public function test_detect_orphaned_running_job(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job([
+            'status' => export_job::STATUS_RUNNING,
+            'timestarted' => time(),
+            'timelastprogress' => time(),
+            'progressdone' => 1,
+            'progresstotal' => 5,
+        ], $context);
+
+        $this->assertTrue(export_job::is_orphaned_running_job($job));
+        export_job::detect_interrupted_jobs((int) $context->parentreportid);
+        $updated = export_job::get((int) $job->id);
+        $this->assertSame(export_job::STATUS_INTERRUPTED, $updated->status);
+    }
+
+    /**
+     * Queued jobs should not show queue-blocked state when nothing is running.
+     */
+    public function test_build_status_payload_queue_not_blocked(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job(['status' => export_job::STATUS_QUEUED], $context);
+
+        $payload = export_job::build_status_payload($job, (int) $context->userid);
+        $this->assertFalse($payload['queueblocked']);
+        $this->assertGreaterThan(0, $payload['queueposition']);
+    }
+
+    /**
+     * Queued jobs should report queue-blocked when another export is running.
+     */
+    public function test_build_status_payload_queue_blocked(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $running = $this->insert_job([
+            'status' => export_job::STATUS_RUNNING,
+            'timestarted' => time(),
+            'timelastprogress' => time(),
+            'chainid' => 'chain-running',
+        ], $context);
+
+        $lockfactory = \core\lock\lock_config::get_lock_factory('block_configurable_reports');
+        $lock = $lockfactory->get_lock('chainjob_' . (int) $running->id, 0);
+        $this->assertNotFalse($lock);
+
+        try {
+            $queued = $this->insert_job([
+                'status' => export_job::STATUS_QUEUED,
+                'chainid' => 'chain-queued',
+                'timecreated' => time() + 1,
+            ], $context);
+
+            $payload = export_job::build_status_payload($queued, (int) $context->userid);
+            $this->assertTrue($payload['queueblocked']);
+        } finally {
+            $lock->release();
+        }
     }
 
     /**

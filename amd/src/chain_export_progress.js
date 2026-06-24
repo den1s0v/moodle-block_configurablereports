@@ -147,7 +147,7 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
         root.find('[data-progresslabel]').text(done + ' / ' + total);
         updateStatCounts(root, status);
 
-        if (status.status === 'queued' && status.queueposition > 0) {
+        if (status.status === 'queued' && status.queueblocked) {
             Str.get_string('chainexportqueuewait', 'block_configurable_reports', {
                 position: status.queueposition,
                 eta: formatEta(status.etaseconds) || '?'

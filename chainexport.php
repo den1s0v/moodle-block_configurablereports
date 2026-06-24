@@ -163,7 +163,7 @@ function block_configurable_reports_render_chainexport_progress(
     ], $filterparams));
 
     $statustext = get_string('chainexportstatus_' . $job->status, 'block_configurable_reports');
-    if ($status['status'] === export_job::STATUS_QUEUED && $status['queueposition'] > 0) {
+    if ($status['status'] === export_job::STATUS_QUEUED && !empty($status['queueblocked'])) {
         $eta = $status['etaseconds'] > 0 ? format_time($status['etaseconds']) : get_string('unknown', 'moodle');
         $statustext = get_string('chainexportqueuewait', 'block_configurable_reports', (object) [
             'position' => $status['queueposition'],
