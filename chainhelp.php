@@ -52,7 +52,6 @@ $PAGE->set_title(get_string('chainhelp_title', 'block_configurable_reports'));
 $PAGE->set_heading(get_string('chainhelp_title', 'block_configurable_reports'));
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(get_string('chainhelp_title', 'block_configurable_reports'));
 
 echo html_writer::tag('p', get_string('chainhelp_intro', 'block_configurable_reports'));
 
