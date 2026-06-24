@@ -57,4 +57,20 @@ $functions = [
         'type' => 'write',
         'ajax' => true,
     ],
+
+    'block_configurable_reports_resume_chain_export' => [
+        'classname' => 'block_configurable_reports\external',
+        'methodname' => 'resume_chain_export',
+        'description' => 'Resume interrupted chain export job.',
+        'type' => 'write',
+        'ajax' => true,
+    ],
+
+    'block_configurable_reports_delete_chain_export' => [
+        'classname' => 'block_configurable_reports\external',
+        'methodname' => 'delete_chain_export',
+        'description' => 'Delete chain export job.',
+        'type' => 'write',
+        'ajax' => true,
+    ],
 ];

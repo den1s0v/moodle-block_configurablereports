@@ -233,5 +233,16 @@ if ($ADMIN->fulltree) {
         )
     );
 
+    $settings->add(
+        new admin_setting_configtext(
+            'block_configurable_reports/chainexportnoprogressminutes',
+            get_string('chainexportnoprogressminutes', 'block_configurable_reports'),
+            get_string('chainexportnoprogressminutes_help', 'block_configurable_reports'),
+            '10',
+            PARAM_INT,
+            6
+        )
+    );
+
 
 }

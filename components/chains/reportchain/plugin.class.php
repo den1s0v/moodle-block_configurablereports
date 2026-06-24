@@ -62,28 +62,9 @@ class plugin_reportchain extends plugin_base {
         $filterlabels = filter_params::get_child_filter_labels($child);
         $mappingparts = [];
         foreach ($data->filterbindings as $binding) {
-            $binding = (object) $binding;
-            $target = trim((string) ($binding->targetfilter ?? ''));
-            if ($target === '') {
-                continue;
-            }
-            $targetlabel = $filterlabels[$target] ?? $target;
-            $mode = $binding->mode ?? filter_params::MODE_EMPTY;
-            switch ($mode) {
-                case filter_params::MODE_COLUMN:
-                    $source = trim((string) ($binding->sourcecolumn ?? ''));
-                    if ($source !== '') {
-                        $mappingparts[] = s($source) . ' → ' . s($targetlabel);
-                    }
-                    break;
-                case filter_params::MODE_CONSTANT:
-                    $constant = (string) ($binding->constantvalue ?? '');
-                    $mappingparts[] = "'" . s($constant) . "' → " . s($targetlabel);
-                    break;
-                case filter_params::MODE_EMPTY:
-                default:
-                    $mappingparts[] = '∅ → ' . s($targetlabel);
-                    break;
+            $line = \block_configurable_reports\chain\definition::format_filter_binding_summary((object) $binding, $filterlabels);
+            if ($line !== null) {
+                $mappingparts[] = $line;
             }
         }
 

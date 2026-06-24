@@ -52,8 +52,9 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
         var percent = status.progresspercent;
         var done = status.progressdone;
         var total = status.progresstotal;
-        var terminal = ['completed', 'partial', 'failed', 'cancelled'].indexOf(status.status) >= 0;
+        var terminal = ['completed', 'partial', 'failed', 'cancelled', 'interrupted'].indexOf(status.status) >= 0;
         var finishedok = status.status === 'completed' || status.status === 'partial';
+        var keeppolling = status.status === 'queued' || status.status === 'running';
         if (finishedok && total > 0) {
             percent = 100;
             done = total;
@@ -90,7 +91,13 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
         }
 
         if (status.errormessage) {
-            root.find('[data-error]').removeClass('d-none').text(status.errormessage);
+            var errorEl = root.find('[data-error]');
+            errorEl.removeClass('d-none alert-danger alert-warning').text(status.errormessage);
+            if (status.status === 'interrupted' || status.status === 'partial') {
+                errorEl.addClass('alert-warning');
+            } else {
+                errorEl.addClass('alert-danger');
+            }
         } else {
             root.find('[data-error]').addClass('d-none');
         }
@@ -132,9 +139,26 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             dismissBtn.addClass('d-none');
         }
 
-        if (terminal) {
+        var resumeBtn = root.find('[data-resumebutton]');
+        if (status.resumable) {
+            resumeBtn.removeClass('d-none');
+        } else {
+            resumeBtn.addClass('d-none');
+        }
+
+        var deleteBtn = root.find('[data-deletebutton]');
+        if (status.deletable) {
+            deleteBtn.removeClass('d-none');
+        } else {
+            deleteBtn.addClass('d-none');
+        }
+
+        if (terminal && !keeppolling) {
             root.data('polling', 0);
             root.find('[data-cancelbutton]').addClass('d-none');
+        } else if (keeppolling) {
+            root.data('polling', 1);
+            root.find('[data-cancelbutton]').removeClass('d-none');
         }
     };
 
@@ -190,6 +214,49 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
         });
     };
 
+    var bindResume = function(root) {
+        root.find('[data-resumebutton]').on('click', function(e) {
+            e.preventDefault();
+            root.data('polling', 1);
+            Ajax.call([{
+                methodname: 'block_configurable_reports_resume_chain_export',
+                args: {jobid: root.data('jobid')},
+                done: function(status) {
+                    applyStatus(root, status);
+                    if (root.data('polling')) {
+                        poll(root);
+                    }
+                },
+                fail: Notification.exception
+            }]);
+        });
+    };
+
+    var bindDelete = function(root) {
+        root.find('[data-deletebutton]').on('click', function(e) {
+            e.preventDefault();
+            Str.get_strings([
+                {key: 'chainexportdeleteconfirm', component: 'block_configurable_reports'},
+                {key: 'yes'},
+                {key: 'no'}
+            ]).then(function(strings) {
+                if (!window.confirm(strings[0])) {
+                    return;
+                }
+                Ajax.call([{
+                    methodname: 'block_configurable_reports_delete_chain_export',
+                    args: {jobid: root.data('jobid')},
+                    done: function(result) {
+                        if (result.deleted && root.data('newexporturl')) {
+                            window.location.href = root.data('newexporturl');
+                        }
+                    },
+                    fail: Notification.exception
+                }]);
+            });
+        });
+    };
+
     /**
      * Bind cancel button.
      *
@@ -232,6 +299,8 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             root.data('polling', 1);
             bindCancel(root);
             bindDismiss(root);
+            bindResume(root);
+            bindDelete(root);
             poll(root);
         });
     };

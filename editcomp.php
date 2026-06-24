@@ -288,6 +288,21 @@ if ($elements) {
         $userjobs = export_job::get_user_jobs_for_report((int) $USER->id, (int) $id);
         if ($userjobs) {
             echo $OUTPUT->heading(get_string('chainexportjobsheading', 'block_configurable_reports'), 4);
+            $clearallurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
+                'id' => $id,
+                'courseid' => $courseid,
+                'deletealljobs' => 1,
+                'sesskey' => sesskey(),
+            ]);
+            echo html_writer::div(
+                html_writer::link(
+                    $clearallurl,
+                    get_string('chainexportclearall', 'block_configurable_reports'),
+                    ['class' => 'btn btn-secondary mb-2', 'onclick' => "return confirm('" .
+                        s(get_string('chainexportclearallconfirm', 'block_configurable_reports')) . "');"]
+                ),
+                'chainexport-clearall mb-2'
+            );
             $jobtable = new html_table();
             $jobtable->attributes['class'] = 'generaltable chainexport-jobs';
             $jobtable->head = [
@@ -331,6 +346,21 @@ if ($elements) {
                         'sesskey' => sesskey(),
                     ]);
                     $actions .= ' ' . html_writer::link($downloadurl, get_string('chainexportdownloadzip', 'block_configurable_reports'));
+                }
+                if (export_job::is_deletable($job)) {
+                    $deleteurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
+                        'id' => $id,
+                        'chainid' => $job->chainid,
+                        'courseid' => $courseid,
+                        'jobid' => (int) $job->id,
+                        'deletejob' => 1,
+                        'sesskey' => sesskey(),
+                    ]);
+                    $actions .= ' ' . html_writer::link(
+                        $deleteurl,
+                        get_string('chainexportdelete', 'block_configurable_reports'),
+                        ['onclick' => "return confirm('" . s(get_string('chainexportdeleteconfirm', 'block_configurable_reports')) . "');"]
+                    );
                 } else if (export_job::is_dismissable($job)) {
                     $dismissurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
                         'id' => $id,

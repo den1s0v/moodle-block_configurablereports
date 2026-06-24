@@ -185,7 +185,9 @@ function block_configurable_reports_render_chainexport_progress(
         ['data-progresslabel' => 1]
     );
     if (!empty($status['errormessage'])) {
-        echo html_writer::tag('p', s($status['errormessage']), ['data-error' => 1, 'class' => 'alert alert-danger']);
+        $errorclass = in_array($status['status'], [export_job::STATUS_INTERRUPTED, export_job::STATUS_PARTIAL], true)
+            ? 'alert alert-warning' : 'alert alert-danger';
+        echo html_writer::tag('p', s($status['errormessage']), ['data-error' => 1, 'class' => $errorclass]);
     } else {
         echo html_writer::tag('p', '', ['data-error' => 1, 'class' => 'd-none alert alert-danger']);
     }
@@ -227,6 +229,18 @@ function block_configurable_reports_render_chainexport_progress(
         get_string('chainexportdismiss', 'block_configurable_reports'),
         ['type' => 'button', 'class' => $dismissclass, 'data-dismissbutton' => 1]
     );
+    $resumeclass = !empty($status['resumable']) ? 'btn btn-success mb-2' : 'btn btn-success mb-2 d-none';
+    echo ' ' . html_writer::tag(
+        'button',
+        get_string('chainexportresume', 'block_configurable_reports'),
+        ['type' => 'button', 'class' => $resumeclass, 'data-resumebutton' => 1]
+    );
+    $deleteclass = !empty($status['deletable']) ? 'btn btn-danger mb-2' : 'btn btn-danger mb-2 d-none';
+    echo ' ' . html_writer::tag(
+        'button',
+        get_string('chainexportdelete', 'block_configurable_reports'),
+        ['type' => 'button', 'class' => $deleteclass, 'data-deletebutton' => 1]
+    );
     echo html_writer::empty_tag('hr');
     echo $output->single_button($newexporturl, get_string('chainexportnewexport', 'block_configurable_reports'), 'get');
     echo html_writer::end_div();
@@ -249,6 +263,8 @@ $courseid = optional_param('courseid', null, PARAM_INT);
 $jobid = optional_param('jobid', 0, PARAM_INT);
 $newexport = optional_param('newexport', 0, PARAM_BOOL);
 $dismissjob = optional_param('dismissjob', 0, PARAM_BOOL);
+$deletejob = optional_param('deletejob', 0, PARAM_BOOL);
+$deletealljobs = optional_param('deletealljobs', 0, PARAM_BOOL);
 $downloadzip = optional_param('downloadzip', 0, PARAM_BOOL);
 $exportdone = optional_param('exportdone', 0, PARAM_BOOL);
 $exportformat = optional_param('exportformat', '', PARAM_ALPHA);
@@ -306,6 +322,32 @@ if ($dismissjob && $jobid) {
         'courseid' => $courseid,
         'newexport' => 1,
     ], $filterparams)), get_string('chainexportdismissed', 'block_configurable_reports'));
+}
+
+if ($deletejob && $jobid) {
+    require_sesskey();
+    $job = export_job::get($jobid);
+    if (!$job || (int) $job->userid !== (int) $USER->id || (int) $job->parentreportid !== (int) $id) {
+        throw new moodle_exception('badpermissions', 'block_configurable_reports');
+    }
+    if (!export_job::delete_job($jobid, (int) $USER->id)) {
+        throw new moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+    }
+    redirect(new moodle_url('/blocks/configurable_reports/editcomp.php', [
+        'id' => $id,
+        'comp' => 'chains',
+        'courseid' => $courseid,
+    ]), get_string('chainexportdeleted', 'block_configurable_reports'));
+}
+
+if ($deletealljobs) {
+    require_sesskey();
+    $deleted = export_job::delete_all_jobs_for_user_report((int) $USER->id, (int) $id);
+    redirect(new moodle_url('/blocks/configurable_reports/editcomp.php', [
+        'id' => $id,
+        'comp' => 'chains',
+        'courseid' => $courseid,
+    ]), get_string('chainexportdeletedall', 'block_configurable_reports', $deleted));
 }
 
 if ($downloadzip && $jobid) {

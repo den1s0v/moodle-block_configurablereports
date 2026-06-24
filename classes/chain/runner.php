@@ -240,11 +240,21 @@ class runner {
         $temppaths = [];
 
         if ($incremental) {
+            $resuming = export_job::should_resume_job($job);
+            if (!$resuming) {
+                $job->exported = json_encode([]);
+                $job->skipped = json_encode([]);
+                $job->progressdone = 0;
+            } else {
+                $exporteditems = json_decode($job->exported ?? '[]', true) ?: [];
+                $skippeditems = json_decode($job->skipped ?? '[]', true) ?: [];
+                $job->progressdone = count($exporteditems) + count($skippeditems);
+            }
             $job->progresstotal = count($groups);
-            $job->exported = $job->exported ?? json_encode([]);
-            $job->skipped = $job->skipped ?? json_encode([]);
             export_job::save($job);
-            $exporter->open_zip_archive($result->zipfilename, (int) $job->id);
+            $zipresume = $resuming && export_job::is_valid_zip_file(export_job::job_zip_path((int) $job->id));
+            $exporter->open_zip_archive($result->zipfilename, (int) $job->id, $zipresume);
+            $processedrowkeys = $resuming ? export_job::get_processed_rowkeys($job) : [];
         }
 
         try {
@@ -256,6 +266,12 @@ class runner {
                 $rownum++;
                 $rowindex = $group->rowindex;
                 $keyvalues = definition::extract_row_key_values($table, $rowindex, $this->formdata->rowkeycolumns);
+                $rowkey = definition::build_row_key_hash($keyvalues);
+
+                if ($incremental && !empty($processedrowkeys[$rowkey])) {
+                    continue;
+                }
+
                 $rowlabel = implode(' / ', array_filter($keyvalues));
                 if ($rowlabel === '') {
                     $rowlabel = get_string('chainexportrownumber', 'block_configurable_reports', $rownum);
@@ -276,7 +292,7 @@ class runner {
                     ];
                     $result->skipped[] = $skip;
                     if ($job) {
-                        $this->append_job_skipped($job, $skip);
+                        $this->append_job_skipped($job, $skip, $rowkey);
                         $this->update_job_progress($job, $durationms);
                     }
                     continue;
@@ -300,7 +316,7 @@ class runner {
                         ];
                         $result->skipped[] = $skip;
                         if ($job) {
-                            $this->append_job_skipped($job, $skip);
+                            $this->append_job_skipped($job, $skip, $rowkey);
                             $this->update_job_progress($job, $durationms);
                         }
                         continue;
@@ -311,6 +327,7 @@ class runner {
                 $exported = (object) [
                     'label' => $rowlabel,
                     'filename' => $filename,
+                    'rowkey' => $rowkey,
                 ];
                 $result->exported[] = $exported;
 
@@ -333,21 +350,30 @@ class runner {
 
             if ($incremental) {
                 $cancelled = $job && export_job::is_cancel_requested($job);
-                if (!empty($result->exported)) {
-                    $result->zippath = $exporter->close_zip_archive();
+                $jobexported = json_decode($job->exported ?? '[]', true) ?: [];
+                if (count($jobexported) > 0) {
+                    if ($exporter->is_zip_open()) {
+                        $result->zippath = $exporter->close_zip_archive();
+                    } else {
+                        $result->zippath = export_job::resolve_zip_path($job);
+                    }
                     $job->zippath = $result->zippath;
                     $job->zipfilename = $result->zipfilename;
                     $job->timefinished = time();
-                    if (!export_job::is_valid_zip_file($result->zippath)) {
+                    if ($result->zippath === null || !export_job::is_valid_zip_file($result->zippath)) {
                         $job->status = export_job::STATUS_FAILED;
                         $job->errormessage = get_string('chainerror_nozip', 'block_configurable_reports');
                         $job->zippath = null;
-                        temp_file_cleanup::delete_file_if_exists($result->zippath);
+                        if ($result->zippath !== null) {
+                            temp_file_cleanup::delete_file_if_exists($result->zippath);
+                        }
                     } else if ($cancelled) {
                         $job->status = export_job::STATUS_PARTIAL;
-                    } else {
+                    } else if ((int) $job->progressdone >= (int) $job->progresstotal) {
                         $job->progressdone = (int) $job->progresstotal;
                         $job->status = export_job::STATUS_COMPLETED;
+                    } else {
+                        $job->status = export_job::STATUS_PARTIAL;
                     }
                 } else if ($cancelled) {
                     $job->status = export_job::STATUS_CANCELLED;
@@ -398,18 +424,27 @@ class runner {
      */
     private function append_job_exported(object $job, object $item): void {
         $exported = json_decode($job->exported ?? '[]', true) ?: [];
-        $exported[] = ['label' => $item->label, 'filename' => $item->filename];
+        $entry = ['label' => $item->label, 'filename' => $item->filename];
+        if (!empty($item->rowkey)) {
+            $entry['rowkey'] = $item->rowkey;
+        }
+        $exported[] = $entry;
         $job->exported = json_encode($exported);
     }
 
     /**
      * @param object $job
      * @param object $item
+     * @param string|null $rowkey
      * @return void
      */
-    private function append_job_skipped(object $job, object $item): void {
+    private function append_job_skipped(object $job, object $item, ?string $rowkey = null): void {
         $skipped = json_decode($job->skipped ?? '[]', true) ?: [];
-        $skipped[] = ['label' => $item->label, 'reason' => $item->reason];
+        $entry = ['label' => $item->label, 'reason' => $item->reason];
+        if ($rowkey !== null && $rowkey !== '') {
+            $entry['rowkey'] = $rowkey;
+        }
+        $skipped[] = $entry;
         $job->skipped = json_encode($skipped);
     }
 
@@ -423,6 +458,7 @@ class runner {
         if ($countasdone) {
             $job->progressdone = (int) $job->progressdone + 1;
         }
+        $job->timelastprogress = time();
         $job->lastdurationms = $durationms;
         if ((int) $job->progressdone > 0) {
             $prevavg = (int) $job->avgdurationms;

@@ -399,6 +399,39 @@ class definition {
     }
 
     /**
+     * Human-readable summary line for one filter binding, or null if inactive.
+     *
+     * @param object $binding
+     * @param array<string, string> $filterlabels
+     * @return string|null
+     */
+    public static function format_filter_binding_summary(object $binding, array $filterlabels): ?string {
+        $target = trim((string) ($binding->targetfilter ?? ''));
+        if ($target === '') {
+            return null;
+        }
+        $targetlabel = $filterlabels[$target] ?? $target;
+        $mode = $binding->mode ?? filter_params::MODE_EMPTY;
+        switch ($mode) {
+            case filter_params::MODE_COLUMN:
+                $source = trim((string) ($binding->sourcecolumn ?? ''));
+                if ($source === '') {
+                    return null;
+                }
+                return s($source) . ' → ' . s($targetlabel);
+            case filter_params::MODE_CONSTANT:
+                $constant = trim((string) ($binding->constantvalue ?? ''));
+                if ($constant === '') {
+                    return null;
+                }
+                return "'" . s($constant) . "' → " . s($targetlabel);
+            case filter_params::MODE_EMPTY:
+            default:
+                return null;
+        }
+    }
+
+    /**
      * Validate filter bindings against the child report filter set.
      *
      * @param object $childreport

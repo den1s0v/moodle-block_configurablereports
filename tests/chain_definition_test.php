@@ -91,6 +91,32 @@ class chain_definition_test extends \advanced_testcase {
     }
 
     /**
+     * Inactive bindings should not appear in chain summary lines.
+     */
+    public function test_format_filter_binding_summary_skips_inactive(): void {
+        $labels = ['filter_searchtext' => 'Search'];
+        $this->assertNull(definition::format_filter_binding_summary((object) [
+            'targetfilter' => 'filter_searchtext',
+            'mode' => filter_params::MODE_EMPTY,
+        ], $labels));
+        $this->assertNull(definition::format_filter_binding_summary((object) [
+            'targetfilter' => 'filter_searchtext',
+            'mode' => filter_params::MODE_COLUMN,
+            'sourcecolumn' => '',
+        ], $labels));
+        $this->assertNull(definition::format_filter_binding_summary((object) [
+            'targetfilter' => 'filter_searchtext',
+            'mode' => filter_params::MODE_CONSTANT,
+            'constantvalue' => '',
+        ], $labels));
+        $this->assertSame('groupid → Search', definition::format_filter_binding_summary((object) [
+            'targetfilter' => 'filter_searchtext',
+            'mode' => filter_params::MODE_COLUMN,
+            'sourcecolumn' => 'groupid',
+        ], $labels));
+    }
+
+    /**
      * Column binding should read parent row values by column name.
      */
     public function test_build_child_filter_params_column_mode(): void {

@@ -251,5 +251,15 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2027061406, 'block', 'configurable_reports');
     }
 
+    if ($oldversion < 2027061407) {
+        $table = new xmldb_table('block_configurable_reports_cjob');
+        $field = new xmldb_field('timelastprogress', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        set_config('chainexportnoprogressminutes', 10, 'block_configurable_reports');
+        upgrade_plugin_savepoint(true, 2027061407, 'block', 'configurable_reports');
+    }
+
     return true;
 }

@@ -53,9 +53,10 @@ class exporter {
      *
      * @param string $zipfilename Download filename (not used in the on-disk path).
      * @param int|null $jobid When set, use a short canonical path for background jobs.
+     * @param bool $resume When true, append to an existing job ZIP if valid.
      * @return string Path to the zip file.
      */
-    public function open_zip_archive(string $zipfilename, ?int $jobid = null): string {
+    public function open_zip_archive(string $zipfilename, ?int $jobid = null, bool $resume = false): string {
         if ($this->zip !== null) {
             throw new \coding_exception('ZIP archive already open');
         }
@@ -63,13 +64,25 @@ class exporter {
         $tempdir = temp_file_cleanup::get_temp_directory();
         if ($jobid !== null) {
             $this->zippath = export_job::job_zip_path($jobid);
-            if (is_file($this->zippath)) {
+            $this->usednames = [];
+            if ($resume && export_job::is_valid_zip_file($this->zippath)) {
+                $existing = new \ZipArchive();
+                if ($existing->open($this->zippath) === true) {
+                    for ($i = 0; $i < $existing->numFiles; $i++) {
+                        $name = $existing->getNameIndex($i);
+                        if ($name !== false && $name !== '') {
+                            $this->usednames[$name] = 1;
+                        }
+                    }
+                    $existing->close();
+                }
+            } else if (is_file($this->zippath)) {
                 @unlink($this->zippath);
             }
         } else {
             $this->zippath = $tempdir . '/' . uniqid('zip_', true) . '.zip';
+            $this->usednames = [];
         }
-        $this->usednames = [];
 
         $zip = new \ZipArchive();
         if ($zip->open($this->zippath, \ZipArchive::CREATE) !== true) {

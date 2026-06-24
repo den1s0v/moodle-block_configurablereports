@@ -66,6 +66,7 @@ class chain_export_job_test extends \advanced_testcase {
             'timestarted' => 0,
             'timefinished' => 0,
             'timeexpires' => $now + DAYSECS,
+            'timelastprogress' => 0,
         ], $overrides);
 
         $record->id = $DB->insert_record(export_job::TABLE, $record);
@@ -171,5 +172,75 @@ class chain_export_job_test extends \advanced_testcase {
         $jobs = export_job::get_user_jobs_for_report((int) $user->id, (int) $context->parentreportid);
         $this->assertCount(1, $jobs);
         $this->assertSame((int) $active->id, (int) reset($jobs)->id);
+    }
+
+    /**
+     * Stale running jobs should become interrupted.
+     */
+    public function test_detect_interrupted_jobs(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job([
+            'status' => export_job::STATUS_RUNNING,
+            'timestarted' => time() - 3600,
+            'timelastprogress' => time() - 3600,
+            'progressdone' => 2,
+            'progresstotal' => 5,
+        ], $context);
+
+        export_job::detect_interrupted_jobs((int) $context->parentreportid);
+        $updated = export_job::get((int) $job->id);
+        $this->assertSame(export_job::STATUS_INTERRUPTED, $updated->status);
+        $this->assertNotEmpty($updated->errormessage);
+    }
+
+    /**
+     * delete_job should remove the database row.
+     */
+    public function test_delete_job(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job(['status' => export_job::STATUS_FAILED], $context);
+
+        $this->assertTrue(export_job::delete_job((int) $job->id, (int) $context->userid));
+        $this->assertNull(export_job::get((int) $job->id));
+    }
+
+    /**
+     * Processed row keys should include exported and skipped entries.
+     */
+    public function test_get_processed_rowkeys(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job([
+            'exported' => json_encode([['rowkey' => 'rk1', 'label' => 'A', 'filename' => 'a.csv']]),
+            'skipped' => json_encode([['rowkey' => 'rk2', 'label' => 'B', 'reason' => 'skip']]),
+        ], $context);
+
+        $keys = export_job::get_processed_rowkeys($job);
+        $this->assertArrayHasKey('rk1', $keys);
+        $this->assertArrayHasKey('rk2', $keys);
+    }
+
+    /**
+     * Interrupted jobs with remaining work should be resumable.
+     */
+    public function test_can_resume_interrupted_job(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job([
+            'status' => export_job::STATUS_INTERRUPTED,
+            'progressdone' => 2,
+            'progresstotal' => 5,
+        ], $context);
+
+        $this->assertTrue(export_job::can_resume_export($job));
+        $this->assertTrue(export_job::resume_job((int) $job->id, (int) $context->userid));
+        $updated = export_job::get((int) $job->id);
+        $this->assertSame(export_job::STATUS_QUEUED, $updated->status);
     }
 }

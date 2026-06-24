@@ -33,6 +33,7 @@ class export_job {
     public const STATUS_PARTIAL = 'partial';
     public const STATUS_FAILED = 'failed';
     public const STATUS_CANCELLED = 'cancelled';
+    public const STATUS_INTERRUPTED = 'interrupted';
 
     public const TABLE = 'block_configurable_reports_cjob';
 
@@ -94,6 +95,7 @@ class export_job {
             'timestarted' => 0,
             'timefinished' => 0,
             'timeexpires' => $now + ($ttlhours * 3600),
+            'timelastprogress' => 0,
         ];
 
         $jobid = (int) $DB->insert_record(self::TABLE, $record);
@@ -137,7 +139,7 @@ class export_job {
     public static function get_resumable_for_user(int $userid, int $parentreportid, string $chainid): ?object {
         global $DB;
 
-        self::reclaim_stale_running_jobs($parentreportid);
+        self::detect_interrupted_jobs($parentreportid);
 
         $now = time();
         $sql = "SELECT *
@@ -146,7 +148,7 @@ class export_job {
                    AND parentreportid = :parentreportid
                    AND chainid = :chainid
                    AND (
-                        status IN (:queued, :running)
+                        status IN (:queued, :running, :interrupted)
                         OR (status IN (:completed, :partial) AND zipdownloaded = 0 AND timeexpires > :now)
                    )
               ORDER BY timecreated DESC";
@@ -156,12 +158,17 @@ class export_job {
             'chainid' => $chainid,
             'queued' => self::STATUS_QUEUED,
             'running' => self::STATUS_RUNNING,
+            'interrupted' => self::STATUS_INTERRUPTED,
             'completed' => self::STATUS_COMPLETED,
             'partial' => self::STATUS_PARTIAL,
             'now' => $now,
         ]);
         foreach ($jobs as $job) {
+            $job = self::refresh_job_state($job);
             if (in_array($job->status, [self::STATUS_QUEUED, self::STATUS_RUNNING], true)) {
+                return $job;
+            }
+            if ($job->status === self::STATUS_INTERRUPTED || self::can_resume_export($job)) {
                 return $job;
             }
             if (self::is_downloadable($job)) {
@@ -181,7 +188,7 @@ class export_job {
     public static function get_user_jobs_for_report(int $userid, int $parentreportid): array {
         global $DB;
 
-        self::reclaim_stale_running_jobs($parentreportid);
+        self::detect_interrupted_jobs($parentreportid);
 
         $now = time();
         $sql = "SELECT *
@@ -189,7 +196,7 @@ class export_job {
                  WHERE userid = :userid
                    AND parentreportid = :parentreportid
                    AND (
-                        status IN (:queued, :running, :failed, :cancelled)
+                        status IN (:queued, :running, :failed, :cancelled, :interrupted)
                         OR (status IN (:completed, :partial) AND zipdownloaded = 0 AND timeexpires > :now)
                    )
               ORDER BY timecreated DESC";
@@ -200,15 +207,23 @@ class export_job {
             'running' => self::STATUS_RUNNING,
             'failed' => self::STATUS_FAILED,
             'cancelled' => self::STATUS_CANCELLED,
+            'interrupted' => self::STATUS_INTERRUPTED,
             'completed' => self::STATUS_COMPLETED,
             'partial' => self::STATUS_PARTIAL,
             'now' => $now,
         ]);
         return array_filter($jobs, function(object $job): bool {
-            if (in_array($job->status, [self::STATUS_QUEUED, self::STATUS_RUNNING, self::STATUS_FAILED, self::STATUS_CANCELLED], true)) {
+            $job = self::refresh_job_state($job);
+            if (in_array($job->status, [
+                self::STATUS_QUEUED,
+                self::STATUS_RUNNING,
+                self::STATUS_FAILED,
+                self::STATUS_CANCELLED,
+                self::STATUS_INTERRUPTED,
+            ], true)) {
                 return true;
             }
-            return self::is_downloadable($job);
+            return self::is_downloadable($job) || self::can_resume_export($job);
         });
     }
 
@@ -271,47 +286,79 @@ class export_job {
         global $DB;
 
         $job = self::get($jobid);
-        if (!$job || in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL, self::STATUS_FAILED, self::STATUS_CANCELLED], true)) {
+        if (!$job || in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_FAILED, self::STATUS_CANCELLED], true)) {
             return;
         }
 
-        self::reclaim_stale_running_jobs((int) $job->parentreportid);
+        self::detect_interrupted_jobs((int) $job->parentreportid);
+        $job = self::get($jobid);
+        if (!$job || in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_FAILED, self::STATUS_CANCELLED, self::STATUS_INTERRUPTED], true)) {
+            if ($job && $job->status === self::STATUS_INTERRUPTED) {
+                self::dispatch_next_queued((int) $job->parentreportid);
+            }
+            return;
+        }
 
-        if ($job->status === self::STATUS_QUEUED) {
-            $running = self::get_running_for_parent((int) $job->parentreportid);
-            if ($running && (int) $running->id !== (int) $job->id) {
-                self::queue_task($jobid);
+        $lockfactory = \core\lock\lock_config::get_lock_factory('block_configurable_reports');
+        $lock = $lockfactory->get_lock('chainjob_' . $jobid, 0);
+        if (!$lock) {
+            self::queue_task($jobid);
+            return;
+        }
+
+        try {
+            $job = self::get($jobid);
+            if (!$job) {
                 return;
             }
-            $job->status = self::STATUS_RUNNING;
-            $job->timestarted = time();
-            $DB->update_record(self::TABLE, $job);
+
+            if ($job->status === self::STATUS_RUNNING && self::is_running_without_progress($job)) {
+                self::finalize_as_interrupted($job);
+                return;
+            }
+
+            if ($job->status === self::STATUS_QUEUED) {
+                $running = self::get_running_for_parent((int) $job->parentreportid);
+                if ($running && (int) $running->id !== (int) $job->id) {
+                    self::queue_task($jobid);
+                    return;
+                }
+                $job->status = self::STATUS_RUNNING;
+                $job->timestarted = time();
+                $job->timelastprogress = time();
+                $DB->update_record(self::TABLE, $job);
+            } else if ($job->status !== self::STATUS_RUNNING) {
+                return;
+            }
+
+            $parentreport = $DB->get_record('block_configurable_reports', ['id' => (int) $job->parentreportid], '*', MUST_EXIST);
+            $chainelement = definition::get_chain_element_by_id($parentreport, $job->chainid);
+            if (!$chainelement) {
+                self::mark_failed($job, get_string('chainerror_invalid', 'block_configurable_reports'));
+                return;
+            }
+
+            if ((int) $job->courseid === SITEID) {
+                $context = \context_system::instance();
+            } else {
+                $context = \context_course::instance((int) $job->courseid);
+            }
+
+            $parentfilters = json_decode($job->parentfilters ?? '[]', true) ?: [];
+
+            $runner = new runner($parentreport, $chainelement, $context, (int) $job->userid, $parentfilters);
+            try {
+                $runner->export_for_job($job);
+            } catch (\Throwable $e) {
+                self::mark_failed($job, $e->getMessage());
+            }
+        } finally {
+            $lock->release();
+            $job = self::get($jobid);
+            if ($job) {
+                self::dispatch_next_queued((int) $job->parentreportid);
+            }
         }
-
-        $parentreport = $DB->get_record('block_configurable_reports', ['id' => (int) $job->parentreportid], '*', MUST_EXIST);
-        $chainelement = definition::get_chain_element_by_id($parentreport, $job->chainid);
-        if (!$chainelement) {
-            self::mark_failed($job, get_string('chainerror_invalid', 'block_configurable_reports'));
-            return;
-        }
-
-        if ((int) $job->courseid === SITEID) {
-            $context = \context_system::instance();
-        } else {
-            $context = \context_course::instance((int) $job->courseid);
-        }
-
-        $parentfilters = json_decode($job->parentfilters ?? '[]', true) ?: [];
-        $selectedrowkeys = json_decode($job->selectedrowkeys ?? '[]', true) ?: [];
-
-        $runner = new runner($parentreport, $chainelement, $context, (int) $job->userid, $parentfilters);
-        try {
-            $runner->export_for_job($job);
-        } catch (\Throwable $e) {
-            self::mark_failed($job, $e->getMessage());
-        }
-
-        self::dispatch_next_queued((int) $job->parentreportid);
     }
 
     /**
@@ -397,6 +444,9 @@ class export_job {
         if (!empty($job->zipdownloaded)) {
             return false;
         }
+        if ($job->status === self::STATUS_INTERRUPTED) {
+            return !self::can_resume_export($job) && !self::is_downloadable($job);
+        }
         if (in_array($job->status, [self::STATUS_FAILED, self::STATUS_CANCELLED], true)) {
             return true;
         }
@@ -430,35 +480,124 @@ class export_job {
     }
 
     /**
-     * Mark long-running jobs as failed so the queue can continue.
+     * Minutes without progress before a running job is treated as interrupted.
+     *
+     * @return int
+     */
+    public static function get_no_progress_minutes(): int {
+        $mins = (int) get_config('block_configurable_reports', 'chainexportnoprogressminutes');
+        return $mins > 0 ? $mins : 10;
+    }
+
+    /**
+     * Whether a running job has not reported progress recently.
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function is_running_without_progress(object $job): bool {
+        if ($job->status !== self::STATUS_RUNNING) {
+            return false;
+        }
+        $last = (int) ($job->timelastprogress ?? 0);
+        if ($last <= 0) {
+            $last = (int) $job->timestarted;
+        }
+        if ($last <= 0) {
+            return false;
+        }
+        $cutoff = time() - self::get_no_progress_minutes() * 60;
+        if ($last < $cutoff) {
+            return true;
+        }
+        $stalecutoff = time() - self::get_stale_run_minutes() * 60;
+        return (int) $job->timestarted > 0 && (int) $job->timestarted < $stalecutoff;
+    }
+
+    /**
+     * Detect and finalize running jobs that stopped making progress.
      *
      * @param int $parentreportid
      * @return void
      */
-    public static function reclaim_stale_running_jobs(int $parentreportid): void {
+    public static function detect_interrupted_jobs(int $parentreportid): void {
         global $DB;
 
-        $cutoff = time() - self::get_stale_run_minutes() * 60;
-        $stale = $DB->get_records_select(
+        $running = $DB->get_records_select(
             self::TABLE,
-            'parentreportid = :parentreportid AND status = :running AND timestarted > 0 AND timestarted < :cutoff',
-            [
-                'parentreportid' => $parentreportid,
-                'running' => self::STATUS_RUNNING,
-                'cutoff' => $cutoff,
-            ]
+            'parentreportid = :parentreportid AND status = :running',
+            ['parentreportid' => $parentreportid, 'running' => self::STATUS_RUNNING]
         );
-        if (!$stale) {
+        foreach ($running as $job) {
+            if (!self::is_running_without_progress($job)) {
+                continue;
+            }
+            $lockfactory = \core\lock\lock_config::get_lock_factory('block_configurable_reports');
+            $lock = $lockfactory->get_lock('chainjob_' . (int) $job->id, 0);
+            if (!$lock) {
+                continue;
+            }
+            try {
+                $fresh = self::get((int) $job->id);
+                if ($fresh && $fresh->status === self::STATUS_RUNNING && self::is_running_without_progress($fresh)) {
+                    self::finalize_as_interrupted($fresh);
+                }
+            } finally {
+                $lock->release();
+            }
+        }
+    }
+
+    /**
+     * Reload job and apply interruption detection for its parent report.
+     *
+     * @param object $job
+     * @return object
+     */
+    public static function refresh_job_state(object $job): object {
+        self::detect_interrupted_jobs((int) $job->parentreportid);
+        return self::get((int) $job->id) ?? $job;
+    }
+
+    /**
+     * Mark a stalled running job as interrupted (or partial when ZIP is valid).
+     *
+     * @param object $job
+     * @return void
+     */
+    public static function finalize_as_interrupted(object $job): void {
+        global $DB;
+
+        if ($job->status !== self::STATUS_RUNNING) {
             return;
         }
-        foreach ($stale as $job) {
-            $job->status = self::STATUS_FAILED;
-            $job->errormessage = get_string('chainexportstale', 'block_configurable_reports');
-            $job->timefinished = time();
-            $job->zipdownloaded = 1;
-            $DB->update_record(self::TABLE, $job);
+
+        $exported = json_decode($job->exported ?? '[]', true) ?: [];
+        $zippath = self::resolve_zip_path($job);
+        $job->timefinished = time();
+        $job->errormessage = get_string('chainexportinterrupted', 'block_configurable_reports', (object) [
+            'done' => (int) $job->progressdone,
+            'total' => (int) $job->progresstotal,
+        ]);
+
+        if ($zippath !== null && count($exported) > 0) {
+            $job->status = self::STATUS_PARTIAL;
+            $job->zippath = $zippath;
+        } else {
+            $job->status = self::STATUS_INTERRUPTED;
         }
-        self::dispatch_next_queued($parentreportid);
+
+        $DB->update_record(self::TABLE, $job);
+        self::dispatch_next_queued((int) $job->parentreportid);
+    }
+
+    /**
+     * @deprecated Use detect_interrupted_jobs().
+     * @param int $parentreportid
+     * @return void
+     */
+    public static function reclaim_stale_running_jobs(int $parentreportid): void {
+        self::detect_interrupted_jobs($parentreportid);
     }
 
     /**
@@ -656,6 +795,8 @@ class export_job {
             throw new \moodle_exception('badpermissions', 'block_configurable_reports');
         }
 
+        $job = self::refresh_job_state($job);
+
         $exported = json_decode($job->exported ?? '[]', true) ?: [];
         $skipped = json_decode($job->skipped ?? '[]', true) ?: [];
         $remaining = max(0, (int) $job->progresstotal - (int) $job->progressdone);
@@ -697,9 +838,160 @@ class export_job {
             'errormessage' => $job->errormessage ?? '',
             'downloadable' => $downloadable,
             'dismissable' => self::is_dismissable($job),
+            'deletable' => self::is_deletable($job),
+            'resumable' => self::can_resume_export($job),
             'zipfilename' => $job->zipfilename ?? '',
             'zipdownloaded' => (bool) $job->zipdownloaded,
         ];
+    }
+
+    /**
+     * Whether export can continue from the last completed iteration.
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function can_resume_export(object $job): bool {
+        if ((int) $job->timeexpires < time()) {
+            return false;
+        }
+        if ($job->status === self::STATUS_INTERRUPTED) {
+            return (int) $job->progressdone < (int) $job->progresstotal;
+        }
+        if ($job->status === self::STATUS_PARTIAL) {
+            return (int) $job->progressdone < (int) $job->progresstotal;
+        }
+        return false;
+    }
+
+    /**
+     * Whether the user may delete this job record.
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function is_deletable(object $job): bool {
+        return $job->status !== self::STATUS_RUNNING;
+    }
+
+    /**
+     * Row keys already exported or skipped for resume.
+     *
+     * @param object $job
+     * @return array<string, bool>
+     */
+    public static function get_processed_rowkeys(object $job): array {
+        $keys = [];
+        foreach (json_decode($job->exported ?? '[]', true) ?: [] as $item) {
+            if (!empty($item['rowkey'])) {
+                $keys[$item['rowkey']] = true;
+            }
+        }
+        foreach (json_decode($job->skipped ?? '[]', true) ?: [] as $item) {
+            if (!empty($item['rowkey'])) {
+                $keys[$item['rowkey']] = true;
+            }
+        }
+        return $keys;
+    }
+
+    /**
+     * Whether runner should continue an in-progress job.
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function should_resume_job(object $job): bool {
+        return self::can_resume_export($job) || (
+            $job->status === self::STATUS_RUNNING
+            && ((int) $job->progressdone > 0 || count(json_decode($job->exported ?? '[]', true) ?: []) > 0)
+        );
+    }
+
+    /**
+     * Re-queue an interrupted or partial job.
+     *
+     * @param int $jobid
+     * @param int $userid
+     * @return bool
+     */
+    public static function resume_job(int $jobid, int $userid): bool {
+        global $DB;
+
+        $job = self::get($jobid);
+        if (!$job || (int) $job->userid !== $userid || !self::can_resume_export($job)) {
+            return false;
+        }
+
+        $job->status = self::STATUS_QUEUED;
+        $job->errormessage = null;
+        $job->timefinished = 0;
+        $job->cancelrequested = 0;
+        $DB->update_record(self::TABLE, $job);
+        self::queue_task($jobid);
+        return true;
+    }
+
+    /**
+     * Remove ZIP files associated with a job.
+     *
+     * @param object $job
+     * @return void
+     */
+    public static function cleanup_job_files(object $job): void {
+        $zippath = self::resolve_zip_path($job);
+        if ($zippath !== null) {
+            temp_file_cleanup::delete_file_if_exists($zippath);
+        }
+        temp_file_cleanup::delete_file_if_exists(self::job_zip_path((int) $job->id));
+    }
+
+    /**
+     * Permanently delete a job owned by the user.
+     *
+     * @param int $jobid
+     * @param int $userid
+     * @return bool
+     */
+    public static function delete_job(int $jobid, int $userid): bool {
+        global $DB;
+
+        $job = self::get($jobid);
+        if (!$job || (int) $job->userid !== $userid || !self::is_deletable($job)) {
+            return false;
+        }
+
+        if ($job->status === self::STATUS_QUEUED) {
+            self::cancel($jobid, $userid);
+            $job = self::get($jobid);
+            if (!$job) {
+                return true;
+            }
+        }
+
+        self::cleanup_job_files($job);
+        $parentreportid = (int) $job->parentreportid;
+        $DB->delete_records(self::TABLE, ['id' => $jobid, 'userid' => $userid]);
+        self::dispatch_next_queued($parentreportid);
+        return true;
+    }
+
+    /**
+     * Delete all non-running export jobs for a user on a parent report.
+     *
+     * @param int $userid
+     * @param int $parentreportid
+     * @return int Number of deleted jobs.
+     */
+    public static function delete_all_jobs_for_user_report(int $userid, int $parentreportid): int {
+        $jobs = self::get_user_jobs_for_report($userid, $parentreportid);
+        $deleted = 0;
+        foreach ($jobs as $job) {
+            if (self::delete_job((int) $job->id, $userid)) {
+                $deleted++;
+            }
+        }
+        return $deleted;
     }
 
     /**
