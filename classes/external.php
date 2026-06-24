@@ -33,6 +33,7 @@ use context_course;
 use context_system;
 use external_api;
 use external_function_parameters;
+use external_multiple_structure;
 use external_single_structure;
 use external_value;
 
@@ -43,6 +44,65 @@ use external_value;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class external extends external_api {
+
+    /**
+     * Shared export row preview (exported file).
+     *
+     * @return external_multiple_structure
+     */
+    private static function exported_preview_returns(): external_multiple_structure {
+        return new external_multiple_structure(
+            new external_single_structure([
+                'label' => new external_value(PARAM_TEXT, 'Row label'),
+                'filename' => new external_value(PARAM_TEXT, 'File name'),
+            ]),
+            'Exported rows preview'
+        );
+    }
+
+    /**
+     * Shared export row preview (skipped).
+     *
+     * @return external_multiple_structure
+     */
+    private static function skipped_preview_returns(): external_multiple_structure {
+        return new external_multiple_structure(
+            new external_single_structure([
+                'label' => new external_value(PARAM_TEXT, 'Row label'),
+                'reason' => new external_value(PARAM_TEXT, 'Skip reason'),
+            ]),
+            'Skipped rows preview'
+        );
+    }
+
+    /**
+     * Base chain export status fields for web service responses.
+     *
+     * @return array<string, external_description>
+     */
+    private static function chain_export_status_base_returns(): array {
+        return [
+            'jobid' => new external_value(PARAM_INT, 'Job id'),
+            'status' => new external_value(PARAM_ALPHA, 'Job status'),
+            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
+            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
+            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
+            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
+            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
+            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
+            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
+            'exportedpreview' => self::exported_preview_returns(),
+            'skippedpreview' => self::skipped_preview_returns(),
+            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
+            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
+            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
+            'deletable' => new external_value(PARAM_BOOL, 'Whether job can be deleted'),
+            'resumable' => new external_value(PARAM_BOOL, 'Whether export can be resumed'),
+            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
+            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
+            'redownloadable' => new external_value(PARAM_BOOL, 'Whether ZIP is within re-download grace'),
+        ];
+    }
 
     /**
      * get_report_data parameters.
@@ -174,24 +234,7 @@ class external extends external_api {
      * @return external_single_structure
      */
     public static function get_chain_export_status_returns(): external_single_structure {
-        return new external_single_structure([
-            'jobid' => new external_value(PARAM_INT, 'Job id'),
-            'status' => new external_value(PARAM_ALPHA, 'Job status'),
-            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
-            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
-            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
-            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
-            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
-            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
-            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
-            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
-            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
-            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
-            'deletable' => new external_value(PARAM_BOOL, 'Whether job can be deleted'),
-            'resumable' => new external_value(PARAM_BOOL, 'Whether export can be resumed'),
-            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
-            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
-        ]);
+        return new external_single_structure(self::chain_export_status_base_returns());
     }
 
     /**
@@ -241,23 +284,7 @@ class external extends external_api {
      * @return external_single_structure
      */
     public static function cancel_chain_export_returns(): external_single_structure {
-        return new external_single_structure([
-            'jobid' => new external_value(PARAM_INT, 'Job id'),
-            'status' => new external_value(PARAM_ALPHA, 'Job status'),
-            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
-            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
-            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
-            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
-            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
-            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
-            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
-            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
-            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
-            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
-            'deletable' => new external_value(PARAM_BOOL, 'Whether job can be deleted'),
-            'resumable' => new external_value(PARAM_BOOL, 'Whether export can be resumed'),
-            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
-            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
+        return new external_single_structure(self::chain_export_status_base_returns() + [
             'cancelled' => new external_value(PARAM_BOOL, 'Whether cancel was accepted'),
         ]);
     }
@@ -309,23 +336,7 @@ class external extends external_api {
      * @return external_single_structure
      */
     public static function dismiss_chain_export_returns(): external_single_structure {
-        return new external_single_structure([
-            'jobid' => new external_value(PARAM_INT, 'Job id'),
-            'status' => new external_value(PARAM_ALPHA, 'Job status'),
-            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
-            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
-            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
-            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
-            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
-            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
-            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
-            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
-            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
-            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
-            'deletable' => new external_value(PARAM_BOOL, 'Whether job can be deleted'),
-            'resumable' => new external_value(PARAM_BOOL, 'Whether export can be resumed'),
-            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
-            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
+        return new external_single_structure(self::chain_export_status_base_returns() + [
             'dismissed' => new external_value(PARAM_BOOL, 'Whether dismiss was accepted'),
         ]);
     }
@@ -377,23 +388,7 @@ class external extends external_api {
      * @return external_single_structure
      */
     public static function resume_chain_export_returns(): external_single_structure {
-        return new external_single_structure([
-            'jobid' => new external_value(PARAM_INT, 'Job id'),
-            'status' => new external_value(PARAM_ALPHA, 'Job status'),
-            'progresstotal' => new external_value(PARAM_INT, 'Total iterations'),
-            'progressdone' => new external_value(PARAM_INT, 'Completed iterations'),
-            'progresspercent' => new external_value(PARAM_INT, 'Progress percent'),
-            'etaseconds' => new external_value(PARAM_INT, 'ETA seconds'),
-            'queueposition' => new external_value(PARAM_INT, 'Queue position'),
-            'exportedcount' => new external_value(PARAM_INT, 'Exported file count'),
-            'skippedcount' => new external_value(PARAM_INT, 'Skipped count'),
-            'errormessage' => new external_value(PARAM_TEXT, 'Error message'),
-            'downloadable' => new external_value(PARAM_BOOL, 'Whether ZIP can be downloaded'),
-            'dismissable' => new external_value(PARAM_BOOL, 'Whether job can be dismissed'),
-            'deletable' => new external_value(PARAM_BOOL, 'Whether job can be deleted'),
-            'resumable' => new external_value(PARAM_BOOL, 'Whether export can be resumed'),
-            'zipfilename' => new external_value(PARAM_TEXT, 'ZIP filename'),
-            'zipdownloaded' => new external_value(PARAM_BOOL, 'Whether ZIP was downloaded'),
+        return new external_single_structure(self::chain_export_status_base_returns() + [
             'resumed' => new external_value(PARAM_BOOL, 'Whether resume was accepted'),
         ]);
     }
@@ -406,6 +401,7 @@ class external extends external_api {
     public static function delete_chain_export_parameters(): external_function_parameters {
         return new external_function_parameters([
             'jobid' => new external_value(PARAM_INT, 'Export job id', VALUE_REQUIRED),
+            'returnurl' => new external_value(PARAM_LOCALURL, 'Redirect URL after delete', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -413,12 +409,16 @@ class external extends external_api {
      * Permanently delete a chain export job.
      *
      * @param int $jobid
+     * @param string $returnurl
      * @return array
      */
-    public static function delete_chain_export(int $jobid): array {
+    public static function delete_chain_export(int $jobid, string $returnurl = ''): array {
         global $USER;
 
-        self::validate_parameters(self::delete_chain_export_parameters(), ['jobid' => $jobid]);
+        self::validate_parameters(self::delete_chain_export_parameters(), [
+            'jobid' => $jobid,
+            'returnurl' => $returnurl,
+        ]);
 
         $job = export_job::get($jobid);
         if (!$job) {
@@ -435,7 +435,19 @@ class external extends external_api {
         require_capability('block/configurable_reports:viewreports', $context);
 
         $deleted = export_job::delete_job($jobid, (int) $USER->id);
-        return ['deleted' => $deleted, 'jobid' => $jobid];
+        $redirecturl = '';
+        if ($deleted) {
+            $redirecturl = export_job::resolve_return_url(
+                $returnurl !== '' ? $returnurl : null,
+                (int) $job->parentreportid,
+                (int) $job->courseid
+            )->out(false);
+        }
+        return [
+            'deleted' => $deleted,
+            'jobid' => $jobid,
+            'redirecturl' => $redirecturl,
+        ];
     }
 
     /**
@@ -447,6 +459,7 @@ class external extends external_api {
         return new external_single_structure([
             'deleted' => new external_value(PARAM_BOOL, 'Whether delete succeeded'),
             'jobid' => new external_value(PARAM_INT, 'Deleted job id'),
+            'redirecturl' => new external_value(PARAM_LOCALURL, 'Redirect URL after delete', VALUE_OPTIONAL),
         ]);
     }
 

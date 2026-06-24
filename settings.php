@@ -244,5 +244,16 @@ if ($ADMIN->fulltree) {
         )
     );
 
+    $settings->add(
+        new admin_setting_configtext(
+            'block_configurable_reports/chainexportredownloadminutes',
+            get_string('chainexportredownloadminutes', 'block_configurable_reports'),
+            get_string('chainexportredownloadminutes_help', 'block_configurable_reports'),
+            '15',
+            PARAM_INT,
+            4
+        )
+    );
+
 
 }

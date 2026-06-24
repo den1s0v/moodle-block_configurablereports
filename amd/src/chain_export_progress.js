@@ -43,6 +43,87 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
     };
 
     /**
+     * Resolve redirect URL after destructive actions.
+     *
+     * @param {Object} root
+     * @param {String} redirecturl
+     * @return {String}
+     */
+    var resolveRedirectUrl = function(root, redirecturl) {
+        return redirecturl || root.data('returnurl') || root.data('newexporturl') || '';
+    };
+
+    /**
+     * Update exported/skipped count line.
+     *
+     * @param {Object} root
+     * @param {Object} status
+     */
+    var updateStatCounts = function(root, status) {
+        Str.get_string('chainexportstatcounts', 'block_configurable_reports', {
+            exported: status.exportedcount || 0,
+            skipped: status.skippedcount || 0
+        }).then(function(msg) {
+            root.find('[data-statcounts]').text(msg);
+        }).catch(Notification.exception);
+    };
+
+    /**
+     * Render skipped rows preview in summary block.
+     *
+     * @param {Object} root
+     * @param {Object} status
+     */
+    var updateSummaryPreview = function(root, status) {
+        var terminal = ['completed', 'partial', 'failed', 'cancelled', 'interrupted'].indexOf(status.status) >= 0;
+        var summary = root.find('[data-summary]');
+        if (!terminal) {
+            summary.addClass('d-none').empty();
+            return;
+        }
+        Str.get_strings([
+            {key: 'chainexportsummaryheading', component: 'block_configurable_reports'},
+            {key: 'chainexportskippedheading', component: 'block_configurable_reports'},
+            {key: 'chainexportsummaryrow', component: 'block_configurable_reports'},
+            {key: 'chainexportsummaryfile', component: 'block_configurable_reports'},
+            {key: 'chainexportsummaryreason', component: 'block_configurable_reports'},
+        ]).then(function(strings) {
+            summary.empty();
+            if (status.exportedcount > 0 && status.exportedpreview && status.exportedpreview.length) {
+                var exportedTable = $('<table class="generaltable chainexport-summary"></table>');
+                exportedTable.append('<thead><tr><th></th><th></th></tr></thead>');
+                exportedTable.find('th').eq(0).text(strings[2]);
+                exportedTable.find('th').eq(1).text(strings[3]);
+                var exportedBody = $('<tbody></tbody>');
+                status.exportedpreview.forEach(function(row) {
+                    exportedBody.append($('<tr></tr>').append($('<td></td>').text(row.label))
+                        .append($('<td></td>').text(row.filename)));
+                });
+                exportedTable.append(exportedBody);
+                summary.append($('<h4></h4>').text(strings[0])).append(exportedTable);
+            }
+            if (status.skippedcount > 0 && status.skippedpreview && status.skippedpreview.length) {
+                var skippedTable = $('<table class="generaltable chainexport-summary"></table>');
+                skippedTable.append('<thead><tr><th></th><th></th></tr></thead>');
+                skippedTable.find('th').eq(0).text(strings[2]);
+                skippedTable.find('th').eq(1).text(strings[4]);
+                var skippedBody = $('<tbody></tbody>');
+                status.skippedpreview.forEach(function(row) {
+                    skippedBody.append($('<tr></tr>').append($('<td></td>').text(row.label))
+                        .append($('<td></td>').text(row.reason)));
+                });
+                skippedTable.append(skippedBody);
+                summary.append($('<h4></h4>').text(strings[1])).append(skippedTable);
+            }
+            if (!summary.children().length) {
+                summary.addClass('d-none');
+            } else {
+                summary.removeClass('d-none');
+            }
+        }).catch(Notification.exception);
+    };
+
+    /**
      * Update progress UI from status payload.
      *
      * @param {Object} root
@@ -64,6 +145,7 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             .css('width', percent + '%')
             .text(percent + '%');
         root.find('[data-progresslabel]').text(done + ' / ' + total);
+        updateStatCounts(root, status);
 
         if (status.status === 'queued' && status.queueposition > 0) {
             Str.get_string('chainexportqueuewait', 'block_configurable_reports', {
@@ -117,7 +199,7 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
         } else {
             downloadLink.addClass('d-none');
             root.find('[data-downloadready]').addClass('d-none');
-            if (status.zipdownloaded) {
+            if (status.zipdownloaded && !status.redownloadable) {
                 Str.get_string('chainexportzipalreadydownloaded', 'block_configurable_reports')
                     .then(function(msg) {
                         root.find('[data-alreadydownloaded]').removeClass('d-none').text(msg);
@@ -160,6 +242,8 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             root.data('polling', 1);
             root.find('[data-cancelbutton]').removeClass('d-none');
         }
+
+        updateSummaryPreview(root, status);
     };
 
     /**
@@ -202,9 +286,12 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
                     methodname: 'block_configurable_reports_dismiss_chain_export',
                     args: {jobid: root.data('jobid')},
                     done: function(status) {
-                        if (status.dismissed && root.data('newexporturl')) {
-                            window.location.href = root.data('newexporturl');
-                            return;
+                        if (status.dismissed) {
+                            var url = resolveRedirectUrl(root, '');
+                            if (url) {
+                                window.location.href = url;
+                                return;
+                            }
                         }
                         applyStatus(root, status);
                     },
@@ -245,10 +332,16 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
                 }
                 Ajax.call([{
                     methodname: 'block_configurable_reports_delete_chain_export',
-                    args: {jobid: root.data('jobid')},
+                    args: {
+                        jobid: root.data('jobid'),
+                        returnurl: root.data('returnurl') || ''
+                    },
                     done: function(result) {
-                        if (result.deleted && root.data('newexporturl')) {
-                            window.location.href = root.data('newexporturl');
+                        if (result.deleted) {
+                            var url = resolveRedirectUrl(root, result.redirecturl);
+                            if (url) {
+                                window.location.href = url;
+                            }
                         }
                     },
                     fail: Notification.exception

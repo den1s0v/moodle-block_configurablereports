@@ -67,6 +67,7 @@ class chain_export_job_test extends \advanced_testcase {
             'timefinished' => 0,
             'timeexpires' => $now + DAYSECS,
             'timelastprogress' => 0,
+            'timezipdownloaded' => 0,
         ], $overrides);
 
         $record->id = $DB->insert_record(export_job::TABLE, $record);
@@ -242,5 +243,100 @@ class chain_export_job_test extends \advanced_testcase {
         $this->assertTrue(export_job::resume_job((int) $job->id, (int) $context->userid));
         $updated = export_job::get((int) $job->id);
         $this->assertSame(export_job::STATUS_QUEUED, $updated->status);
+    }
+
+    /**
+     * delete_all should remove non-running jobs and report running count.
+     */
+    public function test_delete_all_jobs_for_user_report(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $running = $this->insert_job(['status' => export_job::STATUS_RUNNING], $context);
+        $failed = $this->insert_job(['status' => export_job::STATUS_FAILED, 'chainid' => 'chain2'], $context);
+        $cancelled = $this->insert_job(['status' => export_job::STATUS_CANCELLED, 'chainid' => 'chain3'], $context);
+
+        $result = export_job::delete_all_jobs_for_user_report((int) $context->userid, (int) $context->parentreportid);
+        $this->assertSame(2, $result['deleted']);
+        $this->assertSame(1, $result['skippedrunning']);
+        $this->assertNull(export_job::get((int) $failed->id));
+        $this->assertNull(export_job::get((int) $cancelled->id));
+        $this->assertNotNull(export_job::get((int) $running->id));
+    }
+
+    /**
+     * resolve_return_url should accept local URLs and reject external ones.
+     */
+    public function test_resolve_return_url(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $context = $this->create_job_context();
+        $fallback = export_job::resolve_return_url(null, (int) $context->parentreportid, (int) $context->courseid);
+        $this->assertStringContainsString('editcomp.php', $fallback->out(false));
+
+        $local = $CFG->wwwroot . '/blocks/configurable_reports/editcomp.php?id=' . $context->parentreportid .
+            '&comp=chains&courseid=' . $context->courseid;
+        $resolved = export_job::resolve_return_url($local, (int) $context->parentreportid, (int) $context->courseid);
+        $this->assertSame($local, $resolved->out(false));
+
+        $external = export_job::resolve_return_url('https://evil.example.com/', (int) $context->parentreportid);
+        $this->assertStringContainsString('editcomp.php', $external->out(false));
+    }
+
+    /**
+     * Archives should be re-downloadable within grace period only.
+     */
+    public function test_redownload_grace_period(): void {
+        $this->resetAfterTest();
+        set_config('chainexportredownloadminutes', 15, 'block_configurable_reports');
+
+        $context = $this->create_job_context();
+        $tmpdir = \block_configurable_reports\chain\temp_file_cleanup::get_temp_directory();
+        $job = $this->insert_job([
+            'status' => export_job::STATUS_COMPLETED,
+            'exported' => json_encode([['label' => 'A', 'filename' => 'a.csv', 'rowkey' => 'rk1']]),
+            'progressdone' => 1,
+            'progresstotal' => 1,
+            'zipdownloaded' => 1,
+            'timezipdownloaded' => time(),
+        ], $context);
+        $zippath = export_job::job_zip_path((int) $job->id);
+        $zip = new \ZipArchive();
+        $zip->open($zippath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('a.csv', 'a,b,c');
+        $zip->close();
+        $job->zippath = $zippath;
+        $GLOBALS['DB']->update_record(export_job::TABLE, $job);
+        $job = export_job::get((int) $job->id);
+
+        $this->assertTrue(export_job::is_downloadable($job));
+
+        $job->timezipdownloaded = time() - (20 * 60);
+        $GLOBALS['DB']->update_record(export_job::TABLE, $job);
+        $job = export_job::get((int) $job->id);
+        $this->assertFalse(export_job::is_downloadable($job));
+    }
+
+    /**
+     * Status payload should include export statistics previews.
+     */
+    public function test_build_status_payload_includes_summary(): void {
+        $this->resetAfterTest();
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job([
+            'status' => export_job::STATUS_FAILED,
+            'exported' => json_encode([['label' => 'Row 1', 'filename' => 'r1.csv', 'rowkey' => 'rk1']]),
+            'skipped' => json_encode([['label' => 'Row 2', 'reason' => 'No data', 'rowkey' => 'rk2']]),
+            'progressdone' => 1,
+            'progresstotal' => 2,
+        ], $context);
+
+        $payload = export_job::build_status_payload($job, (int) $context->userid);
+        $this->assertSame(1, $payload['exportedcount']);
+        $this->assertSame(1, $payload['skippedcount']);
+        $this->assertSame('Row 2', $payload['skippedpreview'][0]['label']);
+        $this->assertSame('No data', $payload['skippedpreview'][0]['reason']);
     }
 }

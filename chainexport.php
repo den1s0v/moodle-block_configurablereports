@@ -51,36 +51,49 @@ function block_configurable_reports_chainexport_discard_session_zip(): void {
  * @return void
  */
 function block_configurable_reports_render_chainexport_summary($output, export_result $result): void {
-    if (!empty($result->exported)) {
+    block_configurable_reports_render_job_export_summary($output, $result->exported ?? [], $result->skipped ?? []);
+    if (!$result->has_exports()) {
+        echo $output->notification(get_string('chainexportnoexported', 'block_configurable_reports'), 'warning');
+    }
+}
+
+/**
+ * Render exported/skipped summary for a job or sync export result.
+ *
+ * @param renderer_base $output
+ * @param array<int, object|array<string, mixed>> $exported
+ * @param array<int, object|array<string, mixed>> $skipped
+ * @return void
+ */
+function block_configurable_reports_render_job_export_summary($output, array $exported, array $skipped): void {
+    if (!empty($exported)) {
         $table = new html_table();
         $table->attributes['class'] = 'generaltable chainexport-summary';
         $table->head = [
             get_string('chainexportsummaryrow', 'block_configurable_reports'),
             get_string('chainexportsummaryfile', 'block_configurable_reports'),
         ];
-        foreach ($result->exported as $item) {
-            $table->data[] = [s($item->label), s($item->filename)];
+        foreach ($exported as $item) {
+            $item = (object) $item;
+            $table->data[] = [s($item->label ?? ''), s($item->filename ?? '')];
         }
         echo html_writer::tag('h4', get_string('chainexportsummaryheading', 'block_configurable_reports'));
         echo html_writer::table($table);
     }
 
-    if (!empty($result->skipped)) {
+    if (!empty($skipped)) {
         $table = new html_table();
         $table->attributes['class'] = 'generaltable chainexport-summary';
         $table->head = [
             get_string('chainexportsummaryrow', 'block_configurable_reports'),
             get_string('chainexportsummaryreason', 'block_configurable_reports'),
         ];
-        foreach ($result->skipped as $item) {
-            $table->data[] = [s($item->label), s($item->reason)];
+        foreach ($skipped as $item) {
+            $item = (object) $item;
+            $table->data[] = [s($item->label ?? ''), s($item->reason ?? '')];
         }
         echo html_writer::tag('h4', get_string('chainexportskippedheading', 'block_configurable_reports'));
         echo html_writer::table($table);
-    }
-
-    if (!$result->has_exports()) {
-        echo $output->notification(get_string('chainexportnoexported', 'block_configurable_reports'), 'warning');
     }
 }
 
@@ -142,6 +155,13 @@ function block_configurable_reports_render_chainexport_progress(
         'newexport' => 1,
     ], $filterparams));
 
+    $progressreturnurl = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+        'id' => (int) $job->parentreportid,
+        'chainid' => $job->chainid,
+        'courseid' => $courseid,
+        'jobid' => (int) $job->id,
+    ], $filterparams));
+
     $statustext = get_string('chainexportstatus_' . $job->status, 'block_configurable_reports');
     if ($status['status'] === export_job::STATUS_QUEUED && $status['queueposition'] > 0) {
         $eta = $status['etaseconds'] > 0 ? format_time($status['etaseconds']) : get_string('unknown', 'moodle');
@@ -159,9 +179,18 @@ function block_configurable_reports_render_chainexport_progress(
         'data-region' => 'chain-export-progress',
         'data-jobid' => (int) $job->id,
         'data-newexporturl' => $newexporturl->out(false),
+        'data-returnurl' => $progressreturnurl->out_as_local_url(false),
     ]);
     echo html_writer::tag('p', get_string('chainexportprogressheading', 'block_configurable_reports'), ['class' => 'h4']);
     echo html_writer::tag('p', $statustext, ['data-statustext' => 1, 'class' => 'chainexport-statustext']);
+    echo html_writer::tag(
+        'p',
+        get_string('chainexportstatcounts', 'block_configurable_reports', (object) [
+            'exported' => $status['exportedcount'],
+            'skipped' => $status['skippedcount'],
+        ]),
+        ['data-statcounts' => 1, 'class' => 'chainexport-statcounts mb-2']
+    );
     echo html_writer::start_div('progress mb-2');
     echo html_writer::div(
         $progresspercent . '%',
@@ -207,7 +236,8 @@ function block_configurable_reports_render_chainexport_progress(
     );
     echo html_writer::div(
         get_string('chainexportzipalreadydownloaded', 'block_configurable_reports'),
-        'alert alert-info chainexport-alreadydownloaded mb-2' . (empty($status['zipdownloaded']) ? ' d-none' : ''),
+        'alert alert-info chainexport-alreadydownloaded mb-2' .
+            (($status['downloadable'] || empty($status['zipdownloaded'])) ? ' d-none' : ''),
         ['data-alreadydownloaded' => 1]
     );
     if (in_array($status['status'], [export_job::STATUS_QUEUED, export_job::STATUS_RUNNING], true)) {
@@ -242,6 +272,22 @@ function block_configurable_reports_render_chainexport_progress(
         ['type' => 'button', 'class' => $deleteclass, 'data-deletebutton' => 1]
     );
     echo html_writer::empty_tag('hr');
+    $terminal = in_array($status['status'], [
+        export_job::STATUS_COMPLETED,
+        export_job::STATUS_PARTIAL,
+        export_job::STATUS_FAILED,
+        export_job::STATUS_INTERRUPTED,
+        export_job::STATUS_CANCELLED,
+    ], true);
+    echo html_writer::start_div('chainexport-job-summary mb-3' . ($terminal ? '' : ' d-none'), ['data-summary' => 1]);
+    if ($terminal) {
+        block_configurable_reports_render_job_export_summary(
+            $output,
+            json_decode($job->exported ?? '[]', true) ?: [],
+            json_decode($job->skipped ?? '[]', true) ?: []
+        );
+    }
+    echo html_writer::end_div();
     echo $output->single_button($newexporturl, get_string('chainexportnewexport', 'block_configurable_reports'), 'get');
     echo html_writer::end_div();
 }
@@ -268,6 +314,7 @@ $deletealljobs = optional_param('deletealljobs', 0, PARAM_BOOL);
 $downloadzip = optional_param('downloadzip', 0, PARAM_BOOL);
 $exportdone = optional_param('exportdone', 0, PARAM_BOOL);
 $exportformat = optional_param('exportformat', '', PARAM_ALPHA);
+$returnurl = optional_param('returnurl', '', PARAM_LOCALURL);
 
 $filterparams = [];
 $request = array_merge($_POST, $_GET);
@@ -316,12 +363,16 @@ if ($dismissjob && $jobid) {
     if (!export_job::dismiss_job($jobid, (int) $USER->id)) {
         throw new moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
     }
-    redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
-        'id' => $id,
-        'chainid' => $job->chainid,
-        'courseid' => $courseid,
-        'newexport' => 1,
-    ], $filterparams)), get_string('chainexportdismissed', 'block_configurable_reports'));
+    $redirecttarget = export_job::resolve_return_url($returnurl, (int) $id, (int) $courseid);
+    if ($returnurl === '') {
+        $redirecttarget = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+            'id' => $id,
+            'chainid' => $job->chainid,
+            'courseid' => $courseid,
+            'newexport' => 1,
+        ], $filterparams));
+    }
+    redirect($redirecttarget, get_string('chainexportdismissed', 'block_configurable_reports'));
 }
 
 if ($deletejob && $jobid) {
@@ -333,25 +384,40 @@ if ($deletejob && $jobid) {
     if (!export_job::delete_job($jobid, (int) $USER->id)) {
         throw new moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
     }
-    redirect(new moodle_url('/blocks/configurable_reports/editcomp.php', [
-        'id' => $id,
-        'comp' => 'chains',
-        'courseid' => $courseid,
-    ]), get_string('chainexportdeleted', 'block_configurable_reports'));
+    redirect(
+        export_job::resolve_return_url($returnurl, (int) $id, (int) $courseid),
+        get_string('chainexportdeleted', 'block_configurable_reports')
+    );
 }
 
 if ($deletealljobs) {
     require_sesskey();
-    $deleted = export_job::delete_all_jobs_for_user_report((int) $USER->id, (int) $id);
-    redirect(new moodle_url('/blocks/configurable_reports/editcomp.php', [
-        'id' => $id,
-        'comp' => 'chains',
-        'courseid' => $courseid,
-    ]), get_string('chainexportdeletedall', 'block_configurable_reports', $deleted));
+    $result = export_job::delete_all_jobs_for_user_report((int) $USER->id, (int) $id);
+    if ($result['deleted'] > 0) {
+        redirect(
+            export_job::resolve_return_url($returnurl, (int) $id, (int) $courseid),
+            get_string('chainexportdeletedall', 'block_configurable_reports', $result['deleted'])
+        );
+    }
+    if ($result['skippedrunning'] > 0) {
+        redirect(
+            export_job::resolve_return_url($returnurl, (int) $id, (int) $courseid),
+            get_string('chainexportclearallskippedrunning', 'block_configurable_reports', $result['skippedrunning']),
+            null,
+            \core\output\notification::NOTIFY_WARNING
+        );
+    }
+    redirect(
+        export_job::resolve_return_url($returnurl, (int) $id, (int) $courseid),
+        get_string('chainexportclearallnothing', 'block_configurable_reports'),
+        null,
+        \core\output\notification::NOTIFY_INFO
+    );
 }
 
 if ($downloadzip && $jobid) {
     require_sesskey();
+    export_job::cleanup_expired_download_archives((int) $id);
     $job = export_job::get($jobid);
     if (!$job || (int) $job->userid !== (int) $USER->id || (int) $job->parentreportid !== (int) $id) {
         throw new moodle_exception('badpermissions', 'block_configurable_reports');
@@ -365,11 +431,11 @@ if ($downloadzip && $jobid) {
     if (!in_array($job->status, [export_job::STATUS_COMPLETED, export_job::STATUS_PARTIAL], true)) {
         throw new moodle_exception('chainerror_jobnotready', 'block_configurable_reports');
     }
-    if (!empty($job->zipdownloaded)) {
-        redirect($redirecturl, get_string('chainexportzipalreadydownloaded', 'block_configurable_reports'),
-            null, \core\output\notification::NOTIFY_INFO);
-    }
-    if ((int) $job->timeexpires < time()) {
+    if (!export_job::is_downloadable($job)) {
+        if (!empty($job->zipdownloaded) && !export_job::is_within_redownload_grace($job)) {
+            redirect($redirecturl, get_string('chainexportzipalreadydownloaded', 'block_configurable_reports'),
+                null, \core\output\notification::NOTIFY_INFO);
+        }
         redirect($redirecturl, get_string('chainerror_nozip', 'block_configurable_reports'),
             null, \core\output\notification::NOTIFY_WARNING);
     }
@@ -380,7 +446,7 @@ if ($downloadzip && $jobid) {
     }
     $zipfilename = $job->zipfilename ?: basename($zippath);
     export_job::mark_downloaded($jobid, (int) $USER->id);
-    send_temp_file($zippath, $zipfilename);
+    send_file($zippath, $zipfilename, 0, 0, false, false, '');
 }
 
 if ($downloadzip) {

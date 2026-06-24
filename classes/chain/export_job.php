@@ -96,6 +96,7 @@ class export_job {
             'timefinished' => 0,
             'timeexpires' => $now + ($ttlhours * 3600),
             'timelastprogress' => 0,
+            'timezipdownloaded' => 0,
         ];
 
         $jobid = (int) $DB->insert_record(self::TABLE, $record);
@@ -189,8 +190,10 @@ class export_job {
         global $DB;
 
         self::detect_interrupted_jobs($parentreportid);
+        self::cleanup_expired_download_archives($parentreportid);
 
         $now = time();
+        $gracethreshold = $now - self::get_redownload_grace_seconds();
         $sql = "SELECT *
                   FROM {" . self::TABLE . "}
                  WHERE userid = :userid
@@ -198,6 +201,8 @@ class export_job {
                    AND (
                         status IN (:queued, :running, :failed, :cancelled, :interrupted)
                         OR (status IN (:completed, :partial) AND zipdownloaded = 0 AND timeexpires > :now)
+                        OR (status IN (:completed2, :partial2) AND zipdownloaded = 1
+                            AND timezipdownloaded > 0 AND timezipdownloaded > :gracethreshold)
                    )
               ORDER BY timecreated DESC";
         $jobs = $DB->get_records_sql($sql, [
@@ -210,7 +215,10 @@ class export_job {
             'interrupted' => self::STATUS_INTERRUPTED,
             'completed' => self::STATUS_COMPLETED,
             'partial' => self::STATUS_PARTIAL,
+            'completed2' => self::STATUS_COMPLETED,
+            'partial2' => self::STATUS_PARTIAL,
             'now' => $now,
+            'gracethreshold' => $gracethreshold,
         ]);
         return array_filter($jobs, function(object $job): bool {
             $job = self::refresh_job_state($job);
@@ -415,6 +423,34 @@ class export_job {
     }
 
     /**
+     * Re-download grace period in seconds (site setting, 5–60 minutes).
+     *
+     * @return int
+     */
+    public static function get_redownload_grace_seconds(): int {
+        $minutes = (int) get_config('block_configurable_reports', 'chainexportredownloadminutes');
+        if ($minutes < 5) {
+            $minutes = 15;
+        } else if ($minutes > 60) {
+            $minutes = 60;
+        }
+        return $minutes * 60;
+    }
+
+    /**
+     * Whether a previously downloaded archive may be fetched again within grace.
+     *
+     * @param object $job
+     * @return bool
+     */
+    public static function is_within_redownload_grace(object $job): bool {
+        if (empty($job->zipdownloaded) || empty($job->timezipdownloaded)) {
+            return false;
+        }
+        return time() < (int) $job->timezipdownloaded + self::get_redownload_grace_seconds();
+    }
+
+    /**
      * Whether a finished job has a ZIP archive ready to download.
      *
      * @param object $job
@@ -424,14 +460,17 @@ class export_job {
         if (!in_array($job->status, [self::STATUS_COMPLETED, self::STATUS_PARTIAL], true)) {
             return false;
         }
-        if (!empty($job->zipdownloaded)) {
-            return false;
-        }
         if ((int) $job->timeexpires < time()) {
             return false;
         }
         $exported = json_decode($job->exported ?? '[]', true) ?: [];
-        return count($exported) > 0 && self::resolve_zip_path($job) !== null;
+        if (count($exported) === 0 || self::resolve_zip_path($job) === null) {
+            return false;
+        }
+        if (!empty($job->zipdownloaded)) {
+            return self::is_within_redownload_grace($job);
+        }
+        return true;
     }
 
     /**
@@ -825,6 +864,22 @@ class export_job {
             ? (int) round(($progressdone / $progresstotal) * 100)
             : ($job->status === self::STATUS_COMPLETED ? 100 : 0);
 
+        $previewlimit = 50;
+        $exportedpreview = [];
+        foreach (array_slice($exported, 0, $previewlimit) as $item) {
+            $exportedpreview[] = [
+                'label' => (string) ($item['label'] ?? ''),
+                'filename' => (string) ($item['filename'] ?? ''),
+            ];
+        }
+        $skippedpreview = [];
+        foreach (array_slice($skipped, 0, $previewlimit) as $item) {
+            $skippedpreview[] = [
+                'label' => (string) ($item['label'] ?? ''),
+                'reason' => (string) ($item['reason'] ?? ''),
+            ];
+        }
+
         return [
             'jobid' => (int) $job->id,
             'status' => $job->status,
@@ -835,6 +890,8 @@ class export_job {
             'queueposition' => $queueposition,
             'exportedcount' => count($exported),
             'skippedcount' => count($skipped),
+            'exportedpreview' => $exportedpreview,
+            'skippedpreview' => $skippedpreview,
             'errormessage' => $job->errormessage ?? '',
             'downloadable' => $downloadable,
             'dismissable' => self::is_dismissable($job),
@@ -842,7 +899,47 @@ class export_job {
             'resumable' => self::can_resume_export($job),
             'zipfilename' => $job->zipfilename ?? '',
             'zipdownloaded' => (bool) $job->zipdownloaded,
+            'redownloadable' => self::is_within_redownload_grace($job),
         ];
+    }
+
+    /**
+     * Validate a local return URL or fall back to the chains tab.
+     *
+     * @param string|null $returnurl
+     * @param int $reportid Parent report id.
+     * @param int|null $courseid Optional course id for the fallback URL.
+     * @return \moodle_url
+     */
+    public static function resolve_return_url(?string $returnurl, int $reportid, ?int $courseid = null): \moodle_url {
+        global $CFG;
+
+        $fallbackparams = [
+            'id' => $reportid,
+            'comp' => 'chains',
+        ];
+        if ($courseid !== null) {
+            $fallbackparams['courseid'] = $courseid;
+        }
+        $fallback = new \moodle_url('/blocks/configurable_reports/editcomp.php', $fallbackparams);
+
+        if ($returnurl === null || $returnurl === '') {
+            return $fallback;
+        }
+
+        try {
+            $cleanurl = clean_param($returnurl, PARAM_LOCALURL);
+            if ($cleanurl === '') {
+                return $fallback;
+            }
+            $url = new \moodle_url($cleanurl);
+            if (strpos($url->out(false), $CFG->wwwroot) !== 0) {
+                return $fallback;
+            }
+            return $url;
+        } catch (\Throwable $e) {
+            return $fallback;
+        }
     }
 
     /**
@@ -947,13 +1044,13 @@ class export_job {
     }
 
     /**
-     * Permanently delete a job owned by the user.
+     * Permanently delete a job record without dispatching the next queued job.
      *
      * @param int $jobid
      * @param int $userid
      * @return bool
      */
-    public static function delete_job(int $jobid, int $userid): bool {
+    public static function delete_job_record(int $jobid, int $userid): bool {
         global $DB;
 
         $job = self::get($jobid);
@@ -970,8 +1067,26 @@ class export_job {
         }
 
         self::cleanup_job_files($job);
-        $parentreportid = (int) $job->parentreportid;
         $DB->delete_records(self::TABLE, ['id' => $jobid, 'userid' => $userid]);
+        return true;
+    }
+
+    /**
+     * Permanently delete a job owned by the user.
+     *
+     * @param int $jobid
+     * @param int $userid
+     * @return bool
+     */
+    public static function delete_job(int $jobid, int $userid): bool {
+        $job = self::get($jobid);
+        if (!$job) {
+            return false;
+        }
+        $parentreportid = (int) $job->parentreportid;
+        if (!self::delete_job_record($jobid, $userid)) {
+            return false;
+        }
         self::dispatch_next_queued($parentreportid);
         return true;
     }
@@ -981,17 +1096,71 @@ class export_job {
      *
      * @param int $userid
      * @param int $parentreportid
-     * @return int Number of deleted jobs.
+     * @return array{deleted: int, skippedrunning: int}
      */
-    public static function delete_all_jobs_for_user_report(int $userid, int $parentreportid): int {
-        $jobs = self::get_user_jobs_for_report($userid, $parentreportid);
+    public static function delete_all_jobs_for_user_report(int $userid, int $parentreportid): array {
+        global $DB;
+
+        self::detect_interrupted_jobs($parentreportid);
+
+        $running = $DB->count_records_select(
+            self::TABLE,
+            'userid = :userid AND parentreportid = :parentreportid AND status = :running',
+            [
+                'userid' => $userid,
+                'parentreportid' => $parentreportid,
+                'running' => self::STATUS_RUNNING,
+            ]
+        );
+
+        $jobs = $DB->get_records_select(
+            self::TABLE,
+            'userid = :userid AND parentreportid = :parentreportid AND status <> :running',
+            [
+                'userid' => $userid,
+                'parentreportid' => $parentreportid,
+                'running' => self::STATUS_RUNNING,
+            ]
+        );
+
         $deleted = 0;
         foreach ($jobs as $job) {
-            if (self::delete_job((int) $job->id, $userid)) {
+            if (self::delete_job_record((int) $job->id, $userid)) {
                 $deleted++;
             }
         }
-        return $deleted;
+
+        if ($deleted > 0) {
+            self::dispatch_next_queued($parentreportid);
+        }
+
+        return [
+            'deleted' => $deleted,
+            'skippedrunning' => (int) $running,
+        ];
+    }
+
+    /**
+     * Remove ZIP files for jobs whose re-download grace period has expired.
+     *
+     * @param int|null $parentreportid Limit cleanup to one parent report.
+     * @return void
+     */
+    public static function cleanup_expired_download_archives(?int $parentreportid = null): void {
+        global $DB;
+
+        $gracethreshold = time() - self::get_redownload_grace_seconds();
+        $select = 'zipdownloaded = 1 AND timezipdownloaded > 0 AND timezipdownloaded < :gracethreshold';
+        $params = ['gracethreshold' => $gracethreshold];
+        if ($parentreportid !== null) {
+            $select .= ' AND parentreportid = :parentreportid';
+            $params['parentreportid'] = $parentreportid;
+        }
+
+        $jobs = $DB->get_records_select(self::TABLE, $select, $params);
+        foreach ($jobs as $job) {
+            self::cleanup_job_files($job);
+        }
     }
 
     /**
@@ -1032,6 +1201,7 @@ class export_job {
             return null;
         }
         $job->zipdownloaded = 1;
+        $job->timezipdownloaded = time();
         $DB->update_record(self::TABLE, $job);
         return $job;
     }
