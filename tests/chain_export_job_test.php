@@ -285,6 +285,29 @@ class chain_export_job_test extends \advanced_testcase {
     }
 
     /**
+     * After delete, return URL must not point back to the deleted job page.
+     */
+    public function test_resolve_return_url_after_job_delete(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $context = $this->create_job_context();
+        $job = $this->insert_job(['status' => export_job::STATUS_COMPLETED], $context);
+        $progressurl = $CFG->wwwroot . '/blocks/configurable_reports/chainexport.php?id=' . $context->parentreportid .
+            '&chainid=chain1&courseid=' . $context->courseid . '&jobid=' . $job->id;
+
+        $redirect = export_job::resolve_return_url_after_job_delete(
+            $progressurl,
+            (int) $job->id,
+            (int) $context->parentreportid,
+            (int) $context->courseid,
+            'chain1'
+        );
+        $this->assertStringNotContainsString('jobid=' . $job->id, $redirect->out(false));
+        $this->assertStringContainsString('newexport=1', $redirect->out(false));
+    }
+
+    /**
      * Archives should be re-downloadable within grace period only.
      */
     public function test_redownload_grace_period(): void {
@@ -292,7 +315,6 @@ class chain_export_job_test extends \advanced_testcase {
         set_config('chainexportredownloadminutes', 15, 'block_configurable_reports');
 
         $context = $this->create_job_context();
-        $tmpdir = \block_configurable_reports\chain\temp_file_cleanup::get_temp_directory();
         $job = $this->insert_job([
             'status' => export_job::STATUS_COMPLETED,
             'exported' => json_encode([['label' => 'A', 'filename' => 'a.csv', 'rowkey' => 'rk1']]),
@@ -316,6 +338,40 @@ class chain_export_job_test extends \advanced_testcase {
         $GLOBALS['DB']->update_record(export_job::TABLE, $job);
         $job = export_job::get((int) $job->id);
         $this->assertFalse(export_job::is_downloadable($job));
+    }
+
+    /**
+     * Short grace periods (e.g. 1 minute) should be honoured.
+     */
+    public function test_redownload_grace_one_minute(): void {
+        $this->resetAfterTest();
+        set_config('chainexportredownloadminutes', 1, 'block_configurable_reports');
+        $this->assertSame(60, export_job::get_redownload_grace_seconds());
+
+        $context = $this->create_job_context();
+        $job = $this->insert_job([
+            'status' => export_job::STATUS_COMPLETED,
+            'exported' => json_encode([['label' => 'A', 'filename' => 'a.csv', 'rowkey' => 'rk1']]),
+            'progressdone' => 1,
+            'progresstotal' => 1,
+            'zipdownloaded' => 1,
+            'timezipdownloaded' => time() - 30,
+        ], $context);
+        $zippath = export_job::job_zip_path((int) $job->id);
+        $zip = new \ZipArchive();
+        $zip->open($zippath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('a.csv', 'a,b,c');
+        $zip->close();
+        $job->zippath = $zippath;
+        $GLOBALS['DB']->update_record(export_job::TABLE, $job);
+        $job = export_job::get((int) $job->id);
+
+        $this->assertTrue(export_job::is_within_redownload_grace($job));
+
+        $job->timezipdownloaded = time() - 90;
+        $GLOBALS['DB']->update_record(export_job::TABLE, $job);
+        $job = export_job::get((int) $job->id);
+        $this->assertFalse(export_job::is_within_redownload_grace($job));
     }
 
     /**

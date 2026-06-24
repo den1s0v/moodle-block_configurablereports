@@ -203,6 +203,8 @@ class export_job {
                         OR (status IN (:completed, :partial) AND zipdownloaded = 0 AND timeexpires > :now)
                         OR (status IN (:completed2, :partial2) AND zipdownloaded = 1
                             AND timezipdownloaded > 0 AND timezipdownloaded > :gracethreshold)
+                        OR (status IN (:completed3, :partial3) AND zipdownloaded = 1
+                            AND timezipdownloaded > 0 AND timezipdownloaded <= :gracethreshold2)
                    )
               ORDER BY timecreated DESC";
         $jobs = $DB->get_records_sql($sql, [
@@ -217,8 +219,11 @@ class export_job {
             'partial' => self::STATUS_PARTIAL,
             'completed2' => self::STATUS_COMPLETED,
             'partial2' => self::STATUS_PARTIAL,
+            'completed3' => self::STATUS_COMPLETED,
+            'partial3' => self::STATUS_PARTIAL,
             'now' => $now,
             'gracethreshold' => $gracethreshold,
+            'gracethreshold2' => $gracethreshold,
         ]);
         return array_filter($jobs, function(object $job): bool {
             $job = self::refresh_job_state($job);
@@ -231,7 +236,7 @@ class export_job {
             ], true)) {
                 return true;
             }
-            return self::is_downloadable($job) || self::can_resume_export($job);
+            return self::is_downloadable($job) || self::can_resume_export($job) || self::is_deletable($job);
         });
     }
 
@@ -423,18 +428,34 @@ class export_job {
     }
 
     /**
-     * Re-download grace period in seconds (site setting, 5–60 minutes).
+     * Re-download grace period in seconds (site setting, 1+ minutes).
      *
      * @return int
      */
     public static function get_redownload_grace_seconds(): int {
         $minutes = (int) get_config('block_configurable_reports', 'chainexportredownloadminutes');
-        if ($minutes < 5) {
+        if ($minutes <= 0) {
             $minutes = 15;
-        } else if ($minutes > 60) {
-            $minutes = 60;
+        } else if ($minutes > 1440) {
+            $minutes = 1440;
         }
         return $minutes * 60;
+    }
+
+    /**
+     * Timestamp when the archive was first marked downloaded (legacy-safe).
+     *
+     * @param object $job
+     * @return int
+     */
+    public static function get_download_marked_time(object $job): int {
+        if (!empty($job->timezipdownloaded)) {
+            return (int) $job->timezipdownloaded;
+        }
+        if (!empty($job->timefinished)) {
+            return (int) $job->timefinished;
+        }
+        return (int) ($job->timecreated ?? 0);
     }
 
     /**
@@ -444,10 +465,14 @@ class export_job {
      * @return bool
      */
     public static function is_within_redownload_grace(object $job): bool {
-        if (empty($job->zipdownloaded) || empty($job->timezipdownloaded)) {
+        if (empty($job->zipdownloaded)) {
             return false;
         }
-        return time() < (int) $job->timezipdownloaded + self::get_redownload_grace_seconds();
+        $downloadedat = self::get_download_marked_time($job);
+        if ($downloadedat <= 0) {
+            return false;
+        }
+        return time() < $downloadedat + self::get_redownload_grace_seconds();
     }
 
     /**
@@ -943,6 +968,42 @@ class export_job {
     }
 
     /**
+     * Return URL after deleting a job (never back to the deleted job page).
+     *
+     * @param string|null $returnurl
+     * @param int $jobid
+     * @param int $reportid
+     * @param int|null $courseid
+     * @param string|null $chainid
+     * @return \moodle_url
+     */
+    public static function resolve_return_url_after_job_delete(
+        ?string $returnurl,
+        int $jobid,
+        int $reportid,
+        ?int $courseid = null,
+        ?string $chainid = null
+    ): \moodle_url {
+        $url = self::resolve_return_url($returnurl, $reportid, $courseid);
+        $params = $url->params();
+        if (!empty($params['jobid']) && (int) $params['jobid'] === $jobid) {
+            if ($chainid !== null && $chainid !== '') {
+                $newexportparams = [
+                    'id' => $reportid,
+                    'chainid' => $chainid,
+                    'newexport' => 1,
+                ];
+                if ($courseid !== null) {
+                    $newexportparams['courseid'] = $courseid;
+                }
+                return new \moodle_url('/blocks/configurable_reports/chainexport.php', $newexportparams);
+            }
+            return self::resolve_return_url(null, $reportid, $courseid);
+        }
+        return $url;
+    }
+
+    /**
      * Whether export can continue from the last completed iteration.
      *
      * @param object $job
@@ -1150,8 +1211,14 @@ class export_job {
         global $DB;
 
         $gracethreshold = time() - self::get_redownload_grace_seconds();
-        $select = 'zipdownloaded = 1 AND timezipdownloaded > 0 AND timezipdownloaded < :gracethreshold';
-        $params = ['gracethreshold' => $gracethreshold];
+        $select = 'zipdownloaded = 1 AND (
+            (timezipdownloaded > 0 AND timezipdownloaded < :gracethreshold)
+            OR (timezipdownloaded = 0 AND timefinished > 0 AND timefinished < :gracethresholdfinished)
+        )';
+        $params = [
+            'gracethreshold' => $gracethreshold,
+            'gracethresholdfinished' => $gracethreshold,
+        ];
         if ($parentreportid !== null) {
             $select .= ' AND parentreportid = :parentreportid';
             $params['parentreportid'] = $parentreportid;

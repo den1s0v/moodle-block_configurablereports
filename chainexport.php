@@ -382,10 +382,16 @@ if ($deletejob && $jobid) {
         throw new moodle_exception('badpermissions', 'block_configurable_reports');
     }
     if (!export_job::delete_job($jobid, (int) $USER->id)) {
-        throw new moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+        throw new moodle_exception('chainerror_jobnotdeletable', 'block_configurable_reports');
     }
     redirect(
-        export_job::resolve_return_url($returnurl, (int) $id, (int) $courseid),
+        export_job::resolve_return_url_after_job_delete(
+            $returnurl,
+            $jobid,
+            (int) $id,
+            (int) $courseid,
+            $job->chainid
+        ),
         get_string('chainexportdeleted', 'block_configurable_reports')
     );
 }
@@ -554,7 +560,13 @@ if ($chainid) {
         $job = export_job::get($jobid);
         if (!$job || (int) $job->userid !== (int) $USER->id || $job->chainid !== $chainid
             || (int) $job->parentreportid !== (int) $id) {
-            throw new moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+            redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+                'id' => $id,
+                'chainid' => $chainid,
+                'courseid' => $courseid,
+                'newexport' => 1,
+            ], $filterparams)), get_string('chainexportjobgone', 'block_configurable_reports'),
+                null, \core\output\notification::NOTIFY_INFO);
         }
 
         global $DB;

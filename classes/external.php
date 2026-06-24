@@ -434,13 +434,19 @@ class external extends external_api {
         self::validate_context($context);
         require_capability('block/configurable_reports:viewreports', $context);
 
+        $chainid = $job->chainid;
+        $parentreportid = (int) $job->parentreportid;
+        $jobcourseid = (int) $job->courseid;
+
         $deleted = export_job::delete_job($jobid, (int) $USER->id);
         $redirecturl = '';
         if ($deleted) {
-            $redirecturl = export_job::resolve_return_url(
+            $redirecturl = export_job::resolve_return_url_after_job_delete(
                 $returnurl !== '' ? $returnurl : null,
-                (int) $job->parentreportid,
-                (int) $job->courseid
+                $jobid,
+                $parentreportid,
+                $jobcourseid,
+                $chainid
             )->out(false);
         }
         return [
