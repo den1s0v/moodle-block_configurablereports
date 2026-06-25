@@ -230,25 +230,9 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2027061401, 'block', 'configurable_reports');
     }
 
-    if ($oldversion < 2027061402) {
-        upgrade_plugin_savepoint(true, 2027061402, 'block', 'configurable_reports');
-    }
-
     if ($oldversion < 2027061403) {
         set_config('chainexportstalerunminutes', 120, 'block_configurable_reports');
         upgrade_plugin_savepoint(true, 2027061403, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061404) {
-        upgrade_plugin_savepoint(true, 2027061404, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061405) {
-        upgrade_plugin_savepoint(true, 2027061405, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061406) {
-        upgrade_plugin_savepoint(true, 2027061406, 'block', 'configurable_reports');
     }
 
     if ($oldversion < 2027061407) {
@@ -269,42 +253,6 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         }
         set_config('chainexportredownloadminutes', 15, 'block_configurable_reports');
         upgrade_plugin_savepoint(true, 2027061408, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061409) {
-        upgrade_plugin_savepoint(true, 2027061409, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061410) {
-        upgrade_plugin_savepoint(true, 2027061410, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061411) {
-        upgrade_plugin_savepoint(true, 2027061411, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061412) {
-        upgrade_plugin_savepoint(true, 2027061412, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061413) {
-        upgrade_plugin_savepoint(true, 2027061413, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061414) {
-        upgrade_plugin_savepoint(true, 2027061414, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061415) {
-        upgrade_plugin_savepoint(true, 2027061415, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061416) {
-        upgrade_plugin_savepoint(true, 2027061416, 'block', 'configurable_reports');
-    }
-
-    if ($oldversion < 2027061417) {
-        upgrade_plugin_savepoint(true, 2027061417, 'block', 'configurable_reports');
     }
 
     if ($oldversion < 2027061418) {
