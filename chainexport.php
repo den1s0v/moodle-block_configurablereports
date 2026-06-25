@@ -169,6 +169,12 @@ function block_configurable_reports_render_chainexport_progress(
             'position' => $status['queueposition'],
             'eta' => $eta,
         ]);
+    } else if ($status['etaseconds'] > 0
+            && ($status['status'] === export_job::STATUS_RUNNING || $status['status'] === export_job::STATUS_QUEUED)) {
+        $statustext = get_string('chainexportstatuswithremaining', 'block_configurable_reports', (object) [
+            'status' => get_string('chainexportstatus_' . $job->status, 'block_configurable_reports'),
+            'remaining' => format_time($status['etaseconds']),
+        ]);
     }
 
     $progresspercent = $status['progresspercent'];

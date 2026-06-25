@@ -769,6 +769,7 @@ $string['chainexportstatus_partial'] = 'Partial';
 $string['chainexportstatus_failed'] = 'Failed';
 $string['chainexportstatus_cancelled'] = 'Cancelled';
 $string['chainexportstatus_interrupted'] = 'Interrupted';
+$string['chainexportstatuswithremaining'] = '{$a->status}, ~{$a->remaining} remaining';
 $string['chainexportinterrupted'] = 'The export was interrupted ({$a->done} of {$a->total} completed). You can resume from where it stopped or download partial results if available.';
 $string['chainexportresume'] = 'Resume export';
 $string['chainexportdelete'] = 'Delete';

@@ -162,11 +162,16 @@ define(['jquery', 'core/ajax', 'core/notification', 'core/str'], function($, Aja
             });
         } else {
             Str.get_string('chainexportstatus_' + status.status, 'block_configurable_reports').then(function(msg) {
-                var statusText = msg;
                 if (status.etaseconds > 0) {
-                    statusText += ' ~' + formatEta(status.etaseconds);
+                    Str.get_string('chainexportstatuswithremaining', 'block_configurable_reports', {
+                        status: msg,
+                        remaining: formatEta(status.etaseconds)
+                    }).then(function(statusText) {
+                        root.find('[data-statustext]').text(statusText);
+                    }).catch(Notification.exception);
+                } else {
+                    root.find('[data-statustext]').text(msg);
                 }
-                root.find('[data-statustext]').text(statusText);
             }).catch(function() {
                 root.find('[data-statustext]').text(status.status);
             });

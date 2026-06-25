@@ -208,6 +208,7 @@ $string['chainexportstatus_partial'] = 'Частичный';
 $string['chainexportstatus_failed'] = 'Ошибка';
 $string['chainexportstatus_cancelled'] = 'Отменён';
 $string['chainexportstatus_interrupted'] = 'Прерван';
+$string['chainexportstatuswithremaining'] = '{$a->status}, осталось ~{$a->remaining}';
 $string['chainexportinterrupted'] = 'Экспорт был прерван (готово {$a->done} из {$a->total}). Можно продолжить с места остановки или скачать частичный результат, если он доступен.';
 $string['chainexportresume'] = 'Продолжить экспорт';
 $string['chainexportdelete'] = 'Удалить';
