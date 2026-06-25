@@ -299,5 +299,17 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2027061415, 'block', 'configurable_reports');
     }
 
+    if ($oldversion < 2027061416) {
+        upgrade_plugin_savepoint(true, 2027061416, 'block', 'configurable_reports');
+    }
+
+    if ($oldversion < 2027061417) {
+        upgrade_plugin_savepoint(true, 2027061417, 'block', 'configurable_reports');
+    }
+
+    if ($oldversion < 2027061418) {
+        upgrade_plugin_savepoint(true, 2027061418, 'block', 'configurable_reports');
+    }
+
     return true;
 }

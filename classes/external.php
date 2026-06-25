@@ -423,7 +423,31 @@ class external extends external_api {
 
         $job = export_job::get($jobid);
         if (!$job) {
-            throw new \moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+            $ctx = export_job::parse_return_url_context($returnurl !== '' ? $returnurl : null);
+            if ($ctx === null) {
+                throw new \moodle_exception('chainerror_jobnotfound', 'block_configurable_reports');
+            }
+
+            $report = $GLOBALS['DB']->get_record('block_configurable_reports', ['id' => $ctx['reportid']], '*', MUST_EXIST);
+            if ((int) $report->courseid === SITEID) {
+                $context = context_system::instance();
+            } else {
+                $context = context_course::instance($ctx['courseid'] ?: (int) $report->courseid);
+            }
+            self::validate_context($context);
+            require_capability('block/configurable_reports:viewreports', $context);
+
+            return [
+                'deleted' => true,
+                'jobid' => $jobid,
+                'redirecturl' => export_job::resolve_return_url_after_missing_job_delete(
+                    $returnurl !== '' ? $returnurl : null,
+                    $jobid,
+                    $ctx['reportid'],
+                    $ctx['courseid'],
+                    $ctx['chainid']
+                )->out(false),
+            ];
         }
 
         $report = $GLOBALS['DB']->get_record('block_configurable_reports', ['id' => (int) $job->parentreportid], '*', MUST_EXIST);

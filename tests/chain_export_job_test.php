@@ -19,6 +19,7 @@ namespace block_configurable_reports;
 defined('MOODLE_INTERNAL') || die();
 
 use block_configurable_reports\chain\export_job;
+use block_configurable_reports\external;
 
 /**
  * Tests for chain export jobs.
@@ -465,5 +466,46 @@ class chain_export_job_test extends \advanced_testcase {
         $this->assertSame(1, $payload['skippedcount']);
         $this->assertSame('Row 2', $payload['skippedpreview'][0]['label']);
         $this->assertSame('No data', $payload['skippedpreview'][0]['reason']);
+    }
+
+    /**
+     * Return URL should yield report context for idempotent delete redirects.
+     */
+    public function test_parse_return_url_context(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $context = $this->create_job_context();
+        $url = $CFG->wwwroot . '/blocks/configurable_reports/chainexport.php?id=' . $context->parentreportid .
+            '&chainid=chain1&courseid=' . $context->courseid . '&jobid=42';
+
+        $parsed = export_job::parse_return_url_context($url);
+        $this->assertNotNull($parsed);
+        $this->assertSame((int) $context->parentreportid, $parsed['reportid']);
+        $this->assertSame((int) $context->courseid, $parsed['courseid']);
+        $this->assertSame('chain1', $parsed['chainid']);
+    }
+
+    /**
+     * Deleting an already removed job should succeed idempotently (e.g. duplicate tab).
+     */
+    public function test_delete_chain_export_idempotent_when_job_gone(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $context = $this->create_job_context();
+        $job = $this->insert_job(['status' => export_job::STATUS_COMPLETED], $context);
+        $this->getDataGenerator()->enrol_user($context->userid, $context->courseid, 'editingteacher');
+        $this->setUser($DB->get_record('user', ['id' => $context->userid]));
+
+        $this->assertTrue(export_job::delete_job((int) $job->id, (int) $context->userid));
+
+        $returnurl = $CFG->wwwroot . '/blocks/configurable_reports/chainexport.php?id=' . $context->parentreportid .
+            '&chainid=chain1&courseid=' . $context->courseid . '&jobid=' . $job->id;
+
+        $result = external::delete_chain_export((int) $job->id, $returnurl);
+        $this->assertTrue($result['deleted']);
+        $this->assertNotEmpty($result['redirecturl']);
+        $this->assertStringNotContainsString('jobid=' . $job->id, $result['redirecturl']);
     }
 }

@@ -384,7 +384,19 @@ if ($dismissjob && $jobid) {
 if ($deletejob && $jobid) {
     require_sesskey();
     $job = export_job::get($jobid);
-    if (!$job || (int) $job->userid !== (int) $USER->id || (int) $job->parentreportid !== (int) $id) {
+    if (!$job) {
+        redirect(
+            export_job::resolve_return_url_after_missing_job_delete(
+                $returnurl !== '' ? $returnurl : null,
+                $jobid,
+                (int) $id,
+                (int) $courseid,
+                $chainid
+            ),
+            get_string('chainexportdeleted', 'block_configurable_reports')
+        );
+    }
+    if ((int) $job->userid !== (int) $USER->id || (int) $job->parentreportid !== (int) $id) {
         throw new moodle_exception('badpermissions', 'block_configurable_reports');
     }
     if (!export_job::delete_job($jobid, (int) $USER->id)) {

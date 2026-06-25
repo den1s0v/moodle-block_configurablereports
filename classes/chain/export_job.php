@@ -101,6 +101,7 @@ class export_job {
 
         $jobid = (int) $DB->insert_record(self::TABLE, $record);
         self::queue_task($jobid);
+        self::dispatch_next_queued((int) $parentreport->id);
         return $jobid;
     }
 
@@ -111,10 +112,14 @@ class export_job {
      * @return void
      */
     public static function queue_task(int $jobid): void {
+        $job = self::get($jobid);
         $task = new \block_configurable_reports\task\chain_export_task();
         $task->set_custom_data((object) ['jobid' => $jobid]);
         $task->set_component('block_configurable_reports');
-        \core\task\manager::queue_adhoc_task($task);
+        if ($job && !empty($job->userid)) {
+            $task->set_userid((int) $job->userid);
+        }
+        \core\task\manager::reschedule_or_queue_adhoc_task($task);
     }
 
     /**
@@ -902,6 +907,8 @@ class export_job {
                 $queueblocked = true;
                 $runningremaining = max(0, (int) $running->progresstotal - (int) $running->progressdone);
                 $waitetams = $runningremaining * (int) $running->avgdurationms;
+            } else {
+                self::ensure_queued_job_processing($job);
             }
         }
 
@@ -1030,6 +1037,68 @@ class export_job {
             return self::resolve_return_url(null, $reportid, $courseid);
         }
         return $url;
+    }
+
+    /**
+     * Parse report context from a local return URL (for redirects when the job row is already gone).
+     *
+     * @param string|null $returnurl
+     * @return array{reportid: int, courseid: int|null, chainid: string|null}|null
+     */
+    public static function parse_return_url_context(?string $returnurl): ?array {
+        global $CFG;
+
+        if ($returnurl === null || $returnurl === '') {
+            return null;
+        }
+
+        try {
+            $cleanurl = clean_param($returnurl, PARAM_LOCALURL);
+            if ($cleanurl === '') {
+                return null;
+            }
+            $url = new \moodle_url($cleanurl);
+            if (strpos($url->out(false), $CFG->wwwroot) !== 0) {
+                return null;
+            }
+            $params = $url->params();
+            $reportid = (int) ($params['id'] ?? 0);
+            if ($reportid <= 0) {
+                return null;
+            }
+
+            return [
+                'reportid' => $reportid,
+                'courseid' => isset($params['courseid']) ? (int) $params['courseid'] : null,
+                'chainid' => !empty($params['chainid']) ? (string) $params['chainid'] : null,
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Build redirect URL after delete when the job record no longer exists.
+     *
+     * @param string|null $returnurl
+     * @param int $jobid
+     * @param int $reportid
+     * @param int|null $courseid
+     * @param string|null $chainid
+     * @return \moodle_url
+     */
+    public static function resolve_return_url_after_missing_job_delete(
+        ?string $returnurl,
+        int $jobid,
+        int $reportid,
+        ?int $courseid = null,
+        ?string $chainid = null
+    ): \moodle_url {
+        if ($returnurl !== null && $returnurl !== '') {
+            return self::resolve_return_url_after_job_delete($returnurl, $jobid, $reportid, $courseid, $chainid);
+        }
+
+        return self::resolve_return_url(null, $reportid, $courseid);
     }
 
     /**
@@ -1298,5 +1367,22 @@ class export_job {
         $job->timezipdownloaded = time();
         $DB->update_record(self::TABLE, $job);
         return $job;
+    }
+
+    /**
+     * Re-queue a stalled queued job when no other export is running for the parent report.
+     *
+     * @param object $job
+     * @return void
+     */
+    public static function ensure_queued_job_processing(object $job): void {
+        if ($job->status !== self::STATUS_QUEUED) {
+            return;
+        }
+        if (self::get_running_for_parent((int) $job->parentreportid, (int) $job->id)) {
+            return;
+        }
+        self::dispatch_next_queued((int) $job->parentreportid);
+        self::queue_task((int) $job->id);
     }
 }
