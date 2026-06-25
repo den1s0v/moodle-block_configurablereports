@@ -779,10 +779,16 @@ function block_configurable_reports_format_chainexport_job_action(
     string $label,
     array $linkattrs = []
 ): string {
-    $content = html_writer::span(
-        $output->pix_icon($icon, '', 'moodle', ['class' => 'iconsmall']),
-        ['class' => 'chainexport-job-action-icon', 'aria-hidden' => 'true']
-    ) . html_writer::span($label, ['class' => 'chainexport-job-action-label']);
+    // Decorative icon: visible label is rendered separately (see editcomp.php pix_icon usage).
+    $iconhtml = $output->pix_icon($icon, '');
+    if ($iconhtml instanceof \renderable) {
+        $iconhtml = $output->render($iconhtml);
+    }
+    if (!is_string($iconhtml)) {
+        $iconhtml = '';
+    }
+
+    $content = $iconhtml . html_writer::tag('span', $label, ['class' => 'chainexport-job-action-label']);
 
     $attrs = array_merge([
         'class' => 'chainexport-job-action',

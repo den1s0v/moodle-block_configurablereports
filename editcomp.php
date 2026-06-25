@@ -418,7 +418,7 @@ if ($elements) {
                         $dismisslabel
                     );
                 }
-                $actions = html_writer::div(implode('', $actionlinks), ['class' => 'chainexport-job-actions']);
+                $actions = html_writer::tag('div', implode('', $actionlinks), ['class' => 'chainexport-job-actions']);
                 $jobtable->data[] = [
                     s($chainlabel),
                     get_string('chainexportstatus_' . $job->status, 'block_configurable_reports'),

@@ -283,5 +283,21 @@ function xmldb_block_configurable_reports_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2027061411, 'block', 'configurable_reports');
     }
 
+    if ($oldversion < 2027061412) {
+        upgrade_plugin_savepoint(true, 2027061412, 'block', 'configurable_reports');
+    }
+
+    if ($oldversion < 2027061413) {
+        upgrade_plugin_savepoint(true, 2027061413, 'block', 'configurable_reports');
+    }
+
+    if ($oldversion < 2027061414) {
+        upgrade_plugin_savepoint(true, 2027061414, 'block', 'configurable_reports');
+    }
+
+    if ($oldversion < 2027061415) {
+        upgrade_plugin_savepoint(true, 2027061415, 'block', 'configurable_reports');
+    }
+
     return true;
 }
