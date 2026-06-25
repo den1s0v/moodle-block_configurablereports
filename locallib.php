@@ -761,3 +761,33 @@ function block_configurable_reports_can_managesqlreports($context): bool {
 
     return false;
 }
+
+/**
+ * Render a chain export job table action link with icon and label.
+ *
+ * @param renderer_base $output Page renderer.
+ * @param moodle_url $url Link target.
+ * @param string $icon Moodle pix icon name.
+ * @param string $label Visible link label.
+ * @param array<string, mixed> $linkattrs Extra link attributes.
+ * @return string HTML fragment.
+ */
+function block_configurable_reports_format_chainexport_job_action(
+    renderer_base $output,
+    moodle_url $url,
+    string $icon,
+    string $label,
+    array $linkattrs = []
+): string {
+    $content = html_writer::span(
+        $output->pix_icon($icon, '', 'moodle', ['class' => 'iconsmall']),
+        ['class' => 'chainexport-job-action-icon', 'aria-hidden' => 'true']
+    ) . html_writer::span($label, ['class' => 'chainexport-job-action-label']);
+
+    $attrs = array_merge([
+        'class' => 'chainexport-job-action',
+        'title' => $label,
+    ], $linkattrs);
+
+    return html_writer::link($url, $content, $attrs);
+}

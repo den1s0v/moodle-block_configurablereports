@@ -354,7 +354,14 @@ if ($elements) {
                     'courseid' => $courseid,
                     'jobid' => (int) $job->id,
                 ]);
-                $actions = html_writer::link($monitorurl, get_string('chainexportjobmonitor', 'block_configurable_reports'));
+                $actionlinks = [];
+                $monitorlabel = get_string('chainexportjobmonitor', 'block_configurable_reports');
+                $actionlinks[] = block_configurable_reports_format_chainexport_job_action(
+                    $OUTPUT,
+                    $monitorurl,
+                    'i/report',
+                    $monitorlabel
+                );
                 if (export_job::is_downloadable($job)) {
                     $downloadurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
                         'id' => $id,
@@ -368,7 +375,12 @@ if ($elements) {
                     $downloadlabel = export_job::is_within_redownload_grace($job)
                         ? get_string('chainexportredownloadzip', 'block_configurable_reports')
                         : get_string('chainexportdownloadzip', 'block_configurable_reports');
-                    $actions .= ' ' . html_writer::link($downloadurl, $downloadlabel);
+                    $actionlinks[] = block_configurable_reports_format_chainexport_job_action(
+                        $OUTPUT,
+                        $downloadurl,
+                        't/download',
+                        $downloadlabel
+                    );
                 }
                 if (export_job::is_deletable($job)) {
                     $deleteurl = new moodle_url('/blocks/configurable_reports/chainexport.php', [
@@ -380,9 +392,12 @@ if ($elements) {
                         'sesskey' => sesskey(),
                         'returnurl' => $chainsreturnurl,
                     ]);
-                    $actions .= ' ' . html_writer::link(
+                    $deletelabel = get_string('chainexportdelete', 'block_configurable_reports');
+                    $actionlinks[] = block_configurable_reports_format_chainexport_job_action(
+                        $OUTPUT,
                         $deleteurl,
-                        get_string('chainexportdelete', 'block_configurable_reports'),
+                        't/delete',
+                        $deletelabel,
                         ['onclick' => "return confirm('" . s(get_string('chainexportdeleteconfirm', 'block_configurable_reports')) . "');"]
                     );
                 } else if (export_job::is_dismissable($job)) {
@@ -395,8 +410,15 @@ if ($elements) {
                         'sesskey' => sesskey(),
                         'returnurl' => $chainsreturnurl,
                     ]);
-                    $actions .= ' ' . html_writer::link($dismissurl, get_string('chainexportdismiss', 'block_configurable_reports'));
+                    $dismisslabel = get_string('chainexportdismiss', 'block_configurable_reports');
+                    $actionlinks[] = block_configurable_reports_format_chainexport_job_action(
+                        $OUTPUT,
+                        $dismissurl,
+                        't/hide',
+                        $dismisslabel
+                    );
                 }
+                $actions = html_writer::div(implode('', $actionlinks), ['class' => 'chainexport-job-actions']);
                 $jobtable->data[] = [
                     s($chainlabel),
                     get_string('chainexportstatus_' . $job->status, 'block_configurable_reports'),

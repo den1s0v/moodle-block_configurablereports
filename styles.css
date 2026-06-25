@@ -948,3 +948,22 @@ span.CodeMirror-selectedtext {
 #page-blocks-configurable_reports-editreport .CodeMirror {
     width: 100%;
 }
+
+/* Chain export job actions in "My exports" table. */
+#page-blocks-configurable_reports-editcomp .chainexport-jobs .chainexport-job-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+}
+
+#page-blocks-configurable_reports-editcomp .chainexport-jobs .chainexport-job-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+#page-blocks-configurable_reports-editcomp .chainexport-jobs .chainexport-job-action-icon img {
+    margin: 0;
+}
