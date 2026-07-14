@@ -436,21 +436,51 @@ class reportchain_form extends moodleform {
         if (isset($data->rowkeycolumns)) {
             $data->rowkeycolumns = $this->normalise_rowkey_submission($data->rowkeycolumns);
         }
+
+        $childreportid = (int) ($data->childreportid ?? 0);
+        $filteroptions = [];
+        if ($childreportid > 0) {
+            $filteroptions = $this->_customdata['pluginclass']->get_child_filter_options($childreportid);
+        }
+
         $bindings = [];
         $bindingcount = max(0, (int) ($data->filterbindingcount ?? 0));
+        $postedbytarget = [];
         for ($i = 0; $i < $bindingcount; $i++) {
             $target = $this->read_binding_field($data, 'targetfilter', $i);
-            $mode = $this->read_binding_field($data, 'mode', $i);
-            if ($target === '' || !filter_params::is_valid_mode($mode)) {
+            if ($target === '') {
                 continue;
             }
-            $bindings[] = (object) [
+            $mode = $this->read_binding_field($data, 'mode', $i);
+            if (!filter_params::is_valid_mode($mode)) {
+                $mode = filter_params::MODE_EMPTY;
+            }
+            $postedbytarget[$target] = (object) [
                 'targetfilter' => $target,
                 'mode' => $mode,
                 'sourcecolumn' => $this->read_binding_field($data, 'sourcecolumn', $i),
                 'constantvalue' => $this->read_binding_field($data, 'constantvalue', $i),
             ];
         }
+
+        // Always cover every current child filter (MODE_EMPTY when POST is incomplete).
+        if (!empty($filteroptions)) {
+            foreach (array_keys($filteroptions) as $paramname) {
+                if (isset($postedbytarget[$paramname])) {
+                    $bindings[] = $postedbytarget[$paramname];
+                } else {
+                    $bindings[] = (object) [
+                        'targetfilter' => $paramname,
+                        'mode' => filter_params::MODE_EMPTY,
+                        'sourcecolumn' => '',
+                        'constantvalue' => '',
+                    ];
+                }
+            }
+        } else {
+            $bindings = array_values($postedbytarget);
+        }
+
         $data->filterbindings = $bindings;
         for ($i = 0; $i < $bindingcount; $i++) {
             unset(

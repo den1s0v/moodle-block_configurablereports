@@ -41,24 +41,42 @@ class definition {
     }
 
     /**
-     * Get active (enabled) chain elements.
+     * Get active (enabled and valid) chain elements.
      *
      * @param object $report
      * @return array<int, array<string, mixed>>
      */
     public static function get_active_chain_elements(object $report): array {
         $active = [];
+        foreach (self::get_enabled_chain_elements_for_export($report) as $item) {
+            if (!empty($item->usable)) {
+                $active[] = $item->element;
+            }
+        }
+        return $active;
+    }
+
+    /**
+     * Enabled chain elements for the export picker (usable and broken).
+     *
+     * @param object $report
+     * @return array<int, \stdClass> Objects with element, usable, unavailable_reason.
+     */
+    public static function get_enabled_chain_elements_for_export(object $report): array {
+        $items = [];
         foreach (self::get_chain_elements($report) as $element) {
             $formdata = (object) ($element['formdata'] ?? new \stdClass());
             if (isset($formdata->enabled) && empty($formdata->enabled)) {
                 continue;
             }
-            if (!self::validate_element($report, $element)->valid) {
-                continue;
-            }
-            $active[] = $element;
+            $validation = self::validate_element($report, $element);
+            $item = new \stdClass();
+            $item->element = $element;
+            $item->usable = (bool) $validation->valid;
+            $item->unavailable_reason = $validation->valid ? '' : (string) $validation->error;
+            $items[] = $item;
         }
-        return $active;
+        return $items;
     }
 
     /**
@@ -105,6 +123,15 @@ class definition {
 
         $normalised->filterbindings = self::normalise_filterbindings($normalised);
         unset($normalised->mappings);
+
+        if (!empty($normalised->childreportid)) {
+            global $DB;
+            $child = $DB->get_record('block_configurable_reports', ['id' => (int) $normalised->childreportid],
+                '*', IGNORE_MISSING);
+            if ($child) {
+                $normalised->filterbindings = self::ensure_filterbindings_cover_child($normalised, $child);
+            }
+        }
 
         if (empty($normalised->filenamepattern)) {
             $normalised->filenamepattern = '##reportname##_##row##';
@@ -287,12 +314,10 @@ class definition {
             return self::result(false, get_string('chainerror_childmissing', 'block_configurable_reports'));
         }
 
-        $childfilters = filter_params::get_child_filter_options($child);
-        if (!empty($childfilters)) {
-            $bindingcheck = self::validate_filterbindings($child, $formdata);
-            if (!$bindingcheck->valid) {
-                return $bindingcheck;
-            }
+        $formdata->filterbindings = self::ensure_filterbindings_cover_child($formdata, $child);
+        $bindingcheck = self::validate_filterbindings($child, $formdata);
+        if (!$bindingcheck->valid) {
+            return $bindingcheck;
         }
 
         if (empty($formdata->rowkeycolumns)) {
@@ -432,7 +457,53 @@ class definition {
     }
 
     /**
+     * Ensure every child filter has a binding; missing ones become MODE_EMPTY.
+     *
+     * @param object $formdata Normalised chain form data (filterbindings already set).
+     * @param object $childreport
+     * @return array<int, object>
+     */
+    public static function ensure_filterbindings_cover_child(object $formdata, object $childreport): array {
+        $expected = filter_params::get_child_filter_options($childreport);
+        $bytarget = [];
+        foreach ($formdata->filterbindings ?? [] as $binding) {
+            $binding = (object) $binding;
+            $target = trim((string) ($binding->targetfilter ?? ''));
+            if ($target === '') {
+                continue;
+            }
+            $bytarget[$target] = $binding;
+        }
+
+        $complete = [];
+        foreach (array_keys($expected) as $paramname) {
+            if (isset($bytarget[$paramname])) {
+                $complete[] = $bytarget[$paramname];
+                continue;
+            }
+            $complete[] = (object) [
+                'targetfilter' => $paramname,
+                'mode' => filter_params::MODE_EMPTY,
+                'sourcecolumn' => '',
+                'constantvalue' => '',
+            ];
+        }
+
+        // Keep orphan bindings for removed filters (harmless at runtime).
+        foreach ($bytarget as $paramname => $binding) {
+            if (!isset($expected[$paramname])) {
+                $complete[] = $binding;
+            }
+        }
+
+        return $complete;
+    }
+
+    /**
      * Validate filter bindings against the child report filter set.
+     *
+     * Missing bindings are treated as implicit MODE_EMPTY (not a hard failure).
+     * Only explicit column/constant bindings with incomplete data are invalid.
      *
      * @param object $childreport
      * @param object $formdata Normalised chain form data.
@@ -456,9 +527,8 @@ class definition {
 
         foreach (array_keys($expected) as $paramname) {
             if (!isset($bytarget[$paramname])) {
-                $label = $labels[$paramname] ?? $paramname;
-                return self::result(false, get_string('chainerror_missingfilterbinding', 'block_configurable_reports',
-                    $label));
+                // Implicit MODE_EMPTY — do not fail.
+                continue;
             }
             $binding = $bytarget[$paramname];
             $mode = $binding->mode ?? '';
@@ -569,10 +639,23 @@ class definition {
      * @return array<string, mixed>
      */
     public static function build_child_filter_params_for_row(object $table, int $rowindex, object $formdata): array {
+        global $DB;
+
         $params = [];
         $row = $table->data[$rowindex] ?? [];
 
-        foreach ($formdata->filterbindings as $binding) {
+        $bindings = $formdata->filterbindings ?? [];
+        if (!empty($formdata->childreportid)) {
+            $child = $DB->get_record('block_configurable_reports', ['id' => (int) $formdata->childreportid],
+                '*', IGNORE_MISSING);
+            if ($child) {
+                $bindings = self::ensure_filterbindings_cover_child((object) [
+                    'filterbindings' => $bindings,
+                ], $child);
+            }
+        }
+
+        foreach ($bindings as $binding) {
             $target = trim((string) ($binding->targetfilter ?? ''));
             if ($target === '') {
                 continue;

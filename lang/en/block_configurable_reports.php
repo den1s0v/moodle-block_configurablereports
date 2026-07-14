@@ -695,6 +695,7 @@ $string['chainexportlink'] = 'Bulk chain export...';
 $string['chainexportheadingcontext'] = 'Chain export: {$a->source} → {$a->chain}';
 $string['chains_usage_help'] = 'Chains let you parameterise another report using the results of this report. To use a chain, go to {$a->viewreportlink}, configure the desired rows with filters, then click "{$a->exportlink}". See {$a->helplink} for a step-by-step guide.';
 $string['chainexportchoose'] = 'Choose a configured chain to export target reports for selected source rows.';
+$string['chainexportunavailable'] = 'Unavailable due to a configuration error';
 $string['chainexportintro'] = 'Select rows from the source report and download one target report file per row.';
 $string['chainexportselectrows'] = 'Row selection';
 $string['chainexportrows'] = 'Rows';

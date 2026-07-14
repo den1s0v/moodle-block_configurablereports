@@ -505,20 +505,25 @@ if ($downloadzip) {
     send_temp_file($zippath, $zipfilename);
 }
 
-$activechains = definition::get_active_chain_elements($report);
-if (empty($activechains)) {
+$exportchains = definition::get_enabled_chain_elements_for_export($report);
+if (empty($exportchains)) {
     throw new moodle_exception('chainerror_nochains', 'block_configurable_reports');
 }
 
-$singlechainmode = (count($activechains) === 1);
-if ($chainid === '' && $singlechainmode) {
+$usablechains = array_values(array_filter($exportchains, static function(stdClass $item): bool {
+    return !empty($item->usable);
+}));
+$singleusablemode = (count($usablechains) === 1);
+// Auto-skip the picker only when exactly one chain is usable (not when the only one is broken).
+if ($chainid === '' && $singleusablemode) {
     redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
         'id' => $id,
-        'chainid' => $activechains[0]['id'],
+        'chainid' => $usablechains[0]->element['id'],
         'courseid' => $courseid,
         'exportformat' => $exportformat,
     ], $filterparams)));
 }
+$singlechainmode = $singleusablemode;
 
 $reportname = format_string($report->name);
 $hasmanageallcap = has_capability('block/configurable_reports:managereports', $context);
@@ -558,7 +563,12 @@ if ($chainid) {
 
     $validation = definition::validate_element($report, $chainelement);
     if (!$validation->valid) {
-        throw new moodle_exception('chainerror_invalid', 'block_configurable_reports', '', $validation->error);
+        redirect(new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+            'id' => $id,
+            'courseid' => $courseid,
+            'exportformat' => $exportformat,
+        ], $filterparams)), get_string('chainexportunavailable', 'block_configurable_reports'),
+            null, \core\output\notification::NOTIFY_WARNING);
     }
 
     if (!$jobid && !$newexport && $_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -837,16 +847,24 @@ echo $OUTPUT->heading($pagetitle);
 echo html_writer::tag('p', get_string('chainexportchoose', 'block_configurable_reports'));
 
 echo html_writer::start_tag('ul', ['class' => 'chainexportlist']);
-foreach ($activechains as $chainelement) {
+foreach ($exportchains as $item) {
+    $chainelement = $item->element;
     $formdata = definition::normalise_formdata((object) ($chainelement['formdata'] ?? new stdClass()));
     $child = $DB->get_record('block_configurable_reports', ['id' => (int) $formdata->childreportid], 'id,name', IGNORE_MISSING);
     $label = definition::get_chain_list_label($chainelement, $child ?: null);
-    $url = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
-        'id' => $id,
-        'chainid' => $chainelement['id'],
-        'courseid' => $courseid,
-    ], $filterparams));
-    echo html_writer::tag('li', html_writer::link($url, $label));
+    if (!empty($item->usable)) {
+        $url = new moodle_url('/blocks/configurable_reports/chainexport.php', array_merge([
+            'id' => $id,
+            'chainid' => $chainelement['id'],
+            'courseid' => $courseid,
+        ], $filterparams));
+        echo html_writer::tag('li', html_writer::link($url, $label));
+    } else {
+        $disabled = html_writer::span($label, 'dimmed_text') . ' ' .
+            html_writer::span('(' . get_string('chainexportunavailable', 'block_configurable_reports') . ')',
+                'text-muted small');
+        echo html_writer::tag('li', $disabled, ['class' => 'chainexport-unavailable']);
+    }
 }
 echo html_writer::end_tag('ul');
 

@@ -134,6 +134,7 @@ $string['chainexportlink'] = 'Множественный экспорт по ц�
 $string['chainexportheadingcontext'] = 'Экспорт по цепочке: {$a->source} → {$a->chain}';
 $string['chains_usage_help'] = 'Цепочки позволяют параметризовать другой отчёт результатами этого отчёта. Чтобы воспользоваться цепочкой, перейдите в {$a->viewreportlink}, настройте фильтрами желаемый набор строк, затем нажмите «{$a->exportlink}». Пошаговая инструкция: {$a->helplink}.';
 $string['chainexportchoose'] = 'Выберите настроенную цепочку для экспорта целевых отчётов по строкам отчёта-источника.';
+$string['chainexportunavailable'] = 'Недоступна из‑за ошибки настройки';
 $string['chainexportintro'] = 'Выберите строки отчёта-источника и скачайте отдельный файл целевого отчёта для каждой строки.';
 $string['chainexportselectrows'] = 'Выбор строк';
 $string['chainexportrows'] = 'Строки';

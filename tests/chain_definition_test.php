@@ -247,4 +247,263 @@ class chain_definition_test extends \advanced_testcase {
         $result = definition::validate_source_columns($parent, $formdata);
         $this->assertFalse($result->valid);
     }
+
+    /**
+     * Missing child-filter bindings are implicit MODE_EMPTY (soft validation).
+     */
+    public function test_validate_filterbindings_allows_missing_as_empty(): void {
+        $this->resetAfterTest();
+
+        $child = $this->insert_report([
+            'name' => 'Child with filters',
+            'components' => $this->serialize_filters(['searchtext', 'semester']),
+            'export' => 'csv,',
+        ]);
+
+        $formdata = definition::normalise_formdata((object) [
+            'childreportid' => $child->id,
+            'filterbindings' => [(object) [
+                'targetfilter' => 'filter_searchtext',
+                'mode' => filter_params::MODE_COLUMN,
+                'sourcecolumn' => 'groupid',
+            ]],
+        ]);
+
+        $result = definition::validate_filterbindings($child, $formdata);
+        $this->assertTrue($result->valid);
+
+        $bytarget = [];
+        foreach ($formdata->filterbindings as $binding) {
+            $bytarget[$binding->targetfilter] = $binding;
+        }
+        $this->assertArrayHasKey('filter_semester', $bytarget);
+        $this->assertSame(filter_params::MODE_EMPTY, $bytarget['filter_semester']->mode);
+    }
+
+    /**
+     * Runtime params use mapped values and empty string for new uncovered filters.
+     */
+    public function test_build_child_filter_params_covers_new_filters_as_empty(): void {
+        $this->resetAfterTest();
+
+        $child = $this->insert_report([
+            'name' => 'Child filters runtime',
+            'components' => $this->serialize_filters(['searchtext', 'semester']),
+            'export' => 'csv,',
+        ]);
+
+        $table = new \stdClass();
+        $table->head = ['groupid', 'groupname'];
+        $table->data = [['42', 'Alpha']];
+
+        $params = definition::build_child_filter_params_for_row($table, 0, (object) [
+            'childreportid' => $child->id,
+            'filterbindings' => [(object) [
+                'targetfilter' => 'filter_searchtext',
+                'mode' => filter_params::MODE_COLUMN,
+                'sourcecolumn' => 'groupid',
+            ]],
+        ]);
+
+        $this->assertSame('42', $params['filter_searchtext']);
+        $this->assertSame('', $params['filter_semester']);
+    }
+
+    /**
+     * Form save writes MODE_EMPTY for every child filter even when mode POST is absent.
+     */
+    public function test_prepare_filterbinding_data_covers_all_child_filters(): void {
+        $this->resetAfterTest();
+        global $CFG;
+        require_once($CFG->dirroot . '/blocks/configurable_reports/components/chains/reportchain/form.php');
+
+        $child = $this->insert_report([
+            'name' => 'Child for form save',
+            'components' => $this->serialize_filters(['searchtext', 'semester']),
+            'export' => 'csv,',
+        ]);
+
+        $pluginstub = new class($child) {
+            /** @var object */
+            private $child;
+            public function __construct(object $child) {
+                $this->child = $child;
+            }
+            public function get_child_filter_options(int $childreportid): array {
+                return filter_params::get_child_filter_options($this->child);
+            }
+        };
+
+        $form = new class(null, ['pluginclass' => $pluginstub]) extends \reportchain_form {
+            public function definition(): void {
+                // UI not required for prepare_filterbinding_data().
+            }
+        };
+
+        $data = (object) [
+            'enabled' => 1,
+            'childreportid' => $child->id,
+            'filterbindingcount' => 1,
+            'targetfilter0' => 'filter_searchtext',
+            // Intentionally omit mode0 — must default to MODE_EMPTY, not skip the row.
+            'sourcecolumn0' => '',
+            'rowkeycolumns' => 'groupid',
+        ];
+
+        $prepared = $form->prepare_filterbinding_data($data);
+        $bytarget = [];
+        foreach ($prepared->filterbindings as $binding) {
+            $bytarget[$binding->targetfilter] = $binding;
+        }
+
+        $this->assertCount(2, $prepared->filterbindings);
+        $this->assertArrayHasKey('filter_searchtext', $bytarget);
+        $this->assertArrayHasKey('filter_semester', $bytarget);
+        $this->assertSame(filter_params::MODE_EMPTY, $bytarget['filter_searchtext']->mode);
+        $this->assertSame(filter_params::MODE_EMPTY, $bytarget['filter_semester']->mode);
+    }
+
+    /**
+     * Broken column binding keeps the chain in the enabled picker list as unusable.
+     */
+    public function test_enabled_export_list_keeps_invalid_chain_visible(): void {
+        $this->resetAfterTest();
+
+        $child = $this->insert_report([
+            'name' => 'Target',
+            'components' => $this->serialize_filters(['searchtext']),
+            'export' => 'csv,',
+        ]);
+
+        $parent = $this->insert_report([
+            'name' => 'Source',
+            'export' => 'csv,',
+            'components' => cr_serialize([
+                'chains' => [
+                    'elements' => [[
+                        'id' => 'broken-chain',
+                        'pluginname' => 'reportchain',
+                        'formdata' => (object) [
+                            'enabled' => 1,
+                            'chainname' => 'Broken',
+                            'childreportid' => $child->id,
+                            'rowkeycolumns' => ['groupid'],
+                            'filterbindings' => [(object) [
+                                'targetfilter' => 'filter_searchtext',
+                                'mode' => filter_params::MODE_COLUMN,
+                                'sourcecolumn' => '',
+                            ]],
+                        ],
+                    ]],
+                ],
+            ]),
+        ]);
+
+        $exportchains = definition::get_enabled_chain_elements_for_export($parent);
+        $this->assertCount(1, $exportchains);
+        $this->assertFalse($exportchains[0]->usable);
+        $this->assertNotSame('', $exportchains[0]->unavailable_reason);
+        $this->assertSame('broken-chain', $exportchains[0]->element['id']);
+
+        $active = definition::get_active_chain_elements($parent);
+        $this->assertCount(0, $active);
+
+        // One enabled broken chain → zero usable → picker must not auto-redirect.
+        $usable = array_values(array_filter($exportchains, static function(\stdClass $item): bool {
+            return !empty($item->usable);
+        }));
+        $this->assertCount(0, $usable);
+    }
+
+    /**
+     * After soft validation, a new child filter alone does not make the chain unusable.
+     */
+    public function test_new_child_filter_keeps_chain_usable(): void {
+        $this->resetAfterTest();
+
+        $child = $this->insert_report([
+            'name' => 'Target with semester',
+            'components' => $this->serialize_filters(['searchtext', 'semester']),
+            'export' => 'csv,',
+        ]);
+
+        $parent = $this->insert_report([
+            'name' => 'Source',
+            'export' => 'csv,',
+            'components' => cr_serialize([
+                'chains' => [
+                    'elements' => [[
+                        'id' => 'ok-chain',
+                        'pluginname' => 'reportchain',
+                        'formdata' => (object) [
+                            'enabled' => 1,
+                            'chainname' => 'OK',
+                            'childreportid' => $child->id,
+                            'rowkeycolumns' => ['groupid'],
+                            'filterbindings' => [(object) [
+                                'targetfilter' => 'filter_searchtext',
+                                'mode' => filter_params::MODE_COLUMN,
+                                'sourcecolumn' => 'groupid',
+                            ]],
+                        ],
+                    ]],
+                ],
+            ]),
+        ]);
+
+        $exportchains = definition::get_enabled_chain_elements_for_export($parent);
+        $this->assertCount(1, $exportchains);
+        $this->assertTrue($exportchains[0]->usable);
+        $this->assertCount(1, definition::get_active_chain_elements($parent));
+    }
+
+    /**
+     * Insert a block_configurable_reports row for tests.
+     *
+     * @param array<string, mixed> $overrides
+     * @return object
+     */
+    private function insert_report(array $overrides = []): object {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $record = (object) array_merge([
+            'courseid' => $course->id,
+            'ownerid' => $user->id,
+            'visible' => 1,
+            'name' => 'Test report',
+            'summary' => '',
+            'summaryformat' => FORMAT_HTML,
+            'type' => 'sql',
+            'components' => '',
+            'export' => 'csv,',
+            'global' => 0,
+            'lastexecutiontime' => 0,
+            'cron' => 0,
+            'requirefiltersubmit' => -1,
+            'chainexportmode' => -1,
+        ], $overrides);
+
+        $record->id = $DB->insert_record('block_configurable_reports', $record);
+        return $record;
+    }
+
+    /**
+     * Serialize filter plugin names into report components.
+     *
+     * @param array<int, string> $pluginnames
+     * @return string
+     */
+    private function serialize_filters(array $pluginnames): string {
+        $elements = [];
+        foreach ($pluginnames as $pluginname) {
+            $elements[] = [
+                'pluginname' => $pluginname,
+                'pluginfullname' => $pluginname,
+                'formdata' => new \stdClass(),
+            ];
+        }
+        return cr_serialize(['filters' => ['elements' => $elements]]);
+    }
 }
